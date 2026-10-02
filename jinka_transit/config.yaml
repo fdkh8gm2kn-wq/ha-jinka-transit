@@ -1,0 +1,67 @@
+name: Jinka Transit
+version: "1.0.0"
+slug: jinka_transit
+description: Annonces Jinka filtrées par temps de trajet en métro/RER/tram (sans bus) vers tes adresses
+url: https://github.com/nicolastc59boobs/ha-jinka-transit
+arch:
+  - aarch64
+  - amd64
+  - armv7
+init: false
+startup: application
+boot: auto
+homeassistant_api: true
+ingress: true
+ingress_port: 8099
+panel_icon: mdi:home-search
+panel_title: Appart métro/RER
+options:
+  jinka_email: ""
+  jinka_password: ""
+  jinka_token: ""
+  jinka_alerts: []
+  prim_api_key: ""
+  destinations:
+    - name: Bureau
+      address: "20 avenue de Ségur, 75007 Paris"
+      max_minutes: 45
+      arrival_time: "09:00"
+    - name: École
+      address: "1 rue de Rivoli, 75001 Paris"
+      max_minutes: 45
+      arrival_time: "08:30"
+  allowed_modes:
+    - metro
+    - rer
+    - transilien
+    - tram
+  max_walk_minutes: 15
+  whatsapp_phone: ""
+  whatsapp_callmebot_apikey: ""
+  ha_notify_service: ""
+  scan_interval_minutes: 15
+  max_pages_per_alert: 3
+  max_notifications_per_run: 10
+  notify_existing_on_first_run: true
+schema:
+  jinka_email: "str?"
+  jinka_password: "password?"
+  jinka_token: "password?"
+  jinka_alerts:
+    - "str?"
+  prim_api_key: password
+  destinations:
+    - name: str
+      address: str
+      max_minutes: "int(5,180)"
+      arrival_time: "match(^([01][0-9]|2[0-3]):[0-5][0-9]$)"
+  allowed_modes:
+    - "list(metro|rer|transilien|tram)"
+  max_walk_minutes: "int(3,30)"
+  whatsapp_phone: "str?"
+  whatsapp_callmebot_apikey: "password?"
+  ha_notify_service: "str?"
+  scan_interval_minutes: "int(5,1440)"
+  max_pages_per_alert: "int(1,20)"
+  max_notifications_per_run: "int(1,50)"
+  notify_existing_on_first_run: bool

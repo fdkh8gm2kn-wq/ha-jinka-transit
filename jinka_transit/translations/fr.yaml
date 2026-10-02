@@ -1,0 +1,40 @@
+configuration:
+  jinka_email:
+    name: Email Jinka
+    description: Seulement si ton compte Jinka a un mot de passe. Sinon, utilise le jeton.
+  jinka_password:
+    name: Mot de passe Jinka
+  jinka_token:
+    name: Jeton Jinka
+    description: Valeur du cookie LA_API_TOKEN sur jinka.fr (comptes Google/Apple/code email). Voir la doc.
+  jinka_alerts:
+    name: Alertes à surveiller
+    description: Noms ou identifiants de tes alertes Jinka (= les secteurs). Vide = toutes.
+  prim_api_key:
+    name: Clé API PRIM (IDFM)
+    description: Clé gratuite sur prim.iledefrance-mobilites.fr, utilisée pour calculer les trajets.
+  destinations:
+    name: Adresses (jusqu'à 5)
+    description: Bureau, école, gare… Chacune avec son temps max porte-à-porte et son heure d'arrivée (jour ouvré).
+  allowed_modes:
+    name: Modes autorisés
+    description: Le bus est toujours exclu.
+  max_walk_minutes:
+    name: Marche max jusqu'à une station (min)
+  whatsapp_phone:
+    name: Numéro WhatsApp
+    description: Format international, ex. +33612345678
+  whatsapp_callmebot_apikey:
+    name: Clé CallMeBot
+    description: À obtenir gratuitement en suivant callmebot.com/blog/free-api-whatsapp-messages (voir la doc).
+  ha_notify_service:
+    name: Service de notification HA (optionnel)
+    description: Ex. notify.mobile_app_iphone_de_nicolas — en plus ou à la place de WhatsApp.
+  scan_interval_minutes:
+    name: Fréquence des scans (min)
+  max_pages_per_alert:
+    name: Pages lues par alerte
+  max_notifications_per_run:
+    name: Notifications max par scan
+  notify_existing_on_first_run:
+    name: Envoyer les annonces déjà présentes au 1er scan
