@@ -9,6 +9,7 @@
     {"name": "École", "address": "1 rue de Rivoli, 75001 Paris", "max_minutes": 45, "arrival_time": "08:30"}
   ],
   "allowed_modes": ["metro", "rer", "transilien", "tram"],
+  "max_rent": 0,
   "max_walk_minutes": 15,
   "whatsapp_phone": "",
   "whatsapp_callmebot_apikey": "",

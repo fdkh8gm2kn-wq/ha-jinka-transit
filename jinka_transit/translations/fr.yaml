@@ -19,6 +19,9 @@ configuration:
   allowed_modes:
     name: Modes autorisés
     description: Le bus est toujours exclu.
+  max_rent:
+    name: Loyer max (€, charges comprises selon l'annonce)
+    description: 0 = pas de limite. Vérifié avant le calcul des trajets.
   max_walk_minutes:
     name: Marche max jusqu'à une station (min)
   whatsapp_phone:

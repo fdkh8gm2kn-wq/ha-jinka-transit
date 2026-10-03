@@ -165,6 +165,17 @@ assert L["ad3"]["status"] == "notified", L["ad3"]
 assert L["ad1"]["status"] == "notified" and len(calls["whatsapp"]) == 2
 print("ad3 envoyée après passage de l'école à 45 min ✔")
 
+# Loyer max : à 1 400 €, les annonces à 1 500 € sont écartées sans appel IDFM
+OPTIONS["max_rent"] = 1400
+json.dump(OPTIONS, open(os.environ["OPTIONS_PATH"], "w"))
+app.opts = app.load_options()
+n_prim = len(calls["prim"])
+L["ad2"]["crit"] = "old"  # force une réévaluation de ad2 (refusée)
+app.scan()
+assert L["ad2"]["reason"] == "loyer 1500 € > 1400 €", L["ad2"]
+assert len(calls["prim"]) == n_prim
+print("loyer max ✔")
+
 # Plus de 5 adresses -> tronqué à 5
 OPTIONS["destinations"] = [{"name": f"A{i}", "address": "48.8,2.3", "max_minutes": 45, "arrival_time": "09:00"}
                            for i in range(7)]

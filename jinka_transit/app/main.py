@@ -55,7 +55,7 @@ class App:
         refusées auparavant sont réévaluées."""
         o = self.opts
         key = json.dumps([o["destinations"], sorted(o.get("allowed_modes") or []),
-                          o.get("max_walk_minutes")], sort_keys=True)
+                          o.get("max_walk_minutes"), o.get("max_rent", 0)], sort_keys=True)
         return hashlib.sha1(key.encode()).hexdigest()[:12]
 
     def load_state(self):
@@ -91,6 +91,9 @@ class App:
         return out
 
     def evaluate(self, listing, dests, transit):
+        max_rent = int(self.opts.get("max_rent") or 0)
+        if max_rent and listing.get("rent") and listing["rent"] > max_rent:
+            return "rejected", [], f"loyer {int(listing['rent'])} € > {max_rent} €"
         if listing["lat"] is None or listing["lng"] is None:
             return "rejected", [], "pas de coordonnées GPS dans l'annonce"
         results = []
