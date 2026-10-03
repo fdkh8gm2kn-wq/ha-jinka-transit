@@ -4,6 +4,7 @@ import html
 import json
 import threading
 from string import Template
+from urllib.parse import parse_qs
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -26,9 +27,15 @@ th{font-weight:600;color:var(--muted);border-top:0}.ok{color:var(--ok)}.ko{color
 a{color:var(--accent)}button{font:inherit;padding:7px 14px;border-radius:8px;border:1px solid var(--accent);
 background:var(--accent);color:#fff;cursor:pointer}.wrap{overflow-x:auto}
 .filters a{margin-right:10px}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.row input{font:inherit;padding:7px 10px;border-radius:8px;
+border:1px solid var(--line);background:var(--bg);color:var(--fg);min-width:0;flex:1 1 200px}
+.flash{padding:10px 14px;border-radius:10px;margin:12px 0;border:1px solid var(--line);background:var(--card)}
 </style></head><body><main>
 <h1>Jinka Transit</h1>
 <div class="muted">Annonces Jinka filtrées par trajet en transports lourds (sans bus)</div>
+${flash}<div class="card"><b>Connexion Jinka :</b> ${jinka_status}
+<form method="post" action="jinka/send" class="row"><input type="email" name="email" value="${jinka_email}"
+ placeholder="ton email Jinka" required><button>Recevoir un code</button></form>${code_form}</div>
 <div class="card"><b>Dernier scan :</b> ${last_at} — ${last_status}${last_error}
 <form method="post" action="scan" style="display:inline;margin-left:12px"><button>Scanner maintenant</button></form></div>
 <div class="card"><b>Adresses</b><table><tr><th>Nom</th><th>Adresse saisie</th><th>Localisée à</th><th>Max</th><th>Arrivée</th></tr>${dests}</table>
@@ -75,7 +82,23 @@ def render(app, flt):
         f"<a href='?f={k}'{' style=font-weight:700' if flt == k else ''}>{label}</a>"
         for k, label in (("all", "toutes"), ("ok", "OK"), ("ko", "refusées")))
     last = app.last_scan
+    auth = app.state.get("jinka_auth") or {}
+    if app.opts.get("jinka_token"):
+        jinka_status = "<span class='ok'>jeton fourni dans la configuration</span>"
+    elif auth.get("token"):
+        when = datetime.fromtimestamp(auth.get("at", 0)).strftime("%d/%m/%Y %H:%M")
+        jinka_status = f"<span class='ok'>connecté ({esc(auth.get('email', ''))}, le {when})</span>"
+    else:
+        jinka_status = "<span class='ko'>pas connecté</span> — reçois un code par email pour te connecter"
+    code_form = ("" if not app.login else
+                 f"<form method='post' action='jinka/verify' class='row'><input name='code' inputmode='numeric' "
+                 f"pattern='[0-9]{{4}}' maxlength='4' placeholder='code à 4 chiffres reçu sur "
+                 f"{esc(app.login_email)}' required autofocus><button>Valider</button></form>")
+    flash, app.flash = app.flash, ""
     return PAGE.substitute(
+        flash=f"<div class='flash'>{flash}</div>" if flash else "",
+        jinka_status=jinka_status, code_form=code_form,
+        jinka_email=esc(app.login_email or auth.get("email") or app.opts.get("jinka_email") or ""),
         last_at=esc(last["at"] or "—"), last_status=esc(last["status"]),
         last_error=f" <span class='ko'>{esc(last['error'])}</span>" if last.get("error") else "",
         dests=dests, modes=esc(", ".join(app.opts.get("allowed_modes") or [])),
@@ -106,11 +129,27 @@ def start(app, port=8099):
             self._send(200, render(app, flt))
 
         def do_POST(self):
-            if self.path.rstrip("/").endswith("scan"):
+            path = self.path.rstrip("/")
+            length = int(self.headers.get("Content-Length") or 0)
+            form = {k: v[0] for k, v in parse_qs(self.rfile.read(length).decode()).items()}
+            if path.endswith("scan"):
                 app.scan_now.set()
+            elif path.endswith("jinka/send"):
+                try:
+                    app.jinka_send_code(form.get("email", ""))
+                    app.flash = "📧 Code envoyé : regarde tes emails et saisis-le ci-dessous."
+                except Exception as e:  # noqa: BLE001
+                    app.flash = f"<span class='ko'>{html.escape(str(e))}</span>"
+            elif path.endswith("jinka/verify"):
+                try:
+                    app.jinka_verify_code(form.get("code", ""))
+                    app.flash = "<span class='ok'>✅ Connecté à Jinka. Premier scan lancé.</span>"
+                except Exception as e:  # noqa: BLE001
+                    app.flash = f"<span class='ko'>{html.escape(str(e))}</span>"
+            redirect = "../" if "/jinka/" in self.path else "./"
             # redirection relative : fonctionne derrière l'Ingress de Home Assistant
             self.send_response(303)
-            self.send_header("Location", "./")
+            self.send_header("Location", redirect)
             self.end_headers()
 
     server = ThreadingHTTPServer(("0.0.0.0", port), Handler)

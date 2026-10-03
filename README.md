@@ -22,7 +22,11 @@ Clique, confirme dans Home Assistant, puis installe **Jinka Transit** dans la bo
 | **Clé API PRIM** (gratuite) | prim.iledefrance-mobilites.fr → créer un compte → *Mes jetons* → générer une clé. Abonne-toi à l'API « Calculateur Île-de-France Mobilités – Accès générique (v2) ». |
 | **Clé CallMeBot** (WhatsApp, gratuite) | Suis callmebot.com/blog/free-api-whatsapp-messages : tu envoies un message d'activation au numéro indiqué, tu reçois une `apikey`. |
 
-**Récupérer le jeton Jinka** : connecte-toi sur www.jinka.fr dans Chrome → `⌥⌘I` → onglet *Application* →
+**Connexion Jinka par code email (le plus simple)** : ouvre la page de l'add-on (« Appart métro/RER »),
+tape ton email Jinka → « Recevoir un code » → saisis le code reçu → « Valider ». Rien d'autre à copier.
+Si un jour la connexion expire, l'add-on te prévient : refais la même chose.
+
+**Ou bien, récupérer le jeton Jinka à la main** : connecte-toi sur www.jinka.fr dans Chrome → `⌥⌘I` → onglet *Application* →
 *Cookies* → `https://www.jinka.fr` → copie la valeur de `LA_API_TOKEN`. (Si un jour l'add-on t'écrit
 « Jeton Jinka refusé ou expiré », refais cette manip.) Si ton compte a un vrai mot de passe, tu peux mettre
 email + mot de passe à la place.

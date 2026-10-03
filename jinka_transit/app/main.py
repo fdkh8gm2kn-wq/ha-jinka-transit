@@ -32,6 +32,9 @@ class App:
         self.opts = self.load_options()
         self.state = self.load_state()
         self.last_scan = {"at": None, "status": "jamais lancé", "error": None}
+        self.login = None          # connexion Jinka par code en cours
+        self.login_email = ""
+        self.flash = ""            # message affiché une fois dans la page
 
     # ---------- config / état ----------
 
@@ -122,7 +125,8 @@ class App:
         if not o.get("prim_api_key"):
             raise RuntimeError("prim_api_key manquante (clé gratuite sur prim.iledefrance-mobilites.fr).")
 
-        jinka = Jinka(o.get("jinka_email"), o.get("jinka_password"), o.get("jinka_token"))
+        token = o.get("jinka_token") or (self.state.get("jinka_auth") or {}).get("token")
+        jinka = Jinka(o.get("jinka_email"), o.get("jinka_password"), token)
         transit = Transit(o["prim_api_key"], o.get("allowed_modes"), o.get("max_walk_minutes", 15))
         notifier = Notifier(o.get("whatsapp_phone"), o.get("whatsapp_callmebot_apikey"),
                             o.get("ha_notify_service"))
@@ -136,7 +140,8 @@ class App:
             self.state["auth_alert_sent"] = False
         except JinkaAuthError as e:
             if not self.state.get("auth_alert_sent"):
-                notifier.send("Jinka Transit : connexion Jinka impossible", str(e))
+                notifier.send("Jinka Transit : connexion Jinka impossible",
+                              f"{e}\nReconnecte-toi depuis la page de l'add-on (code par email).")
                 self.state["auth_alert_sent"] = True
                 self.save_state()
             raise
@@ -203,6 +208,25 @@ class App:
                     log.exception("Scan échoué : %s", e)
                 self.last_scan = {"at": started.isoformat(timespec="seconds"), "error": str(e),
                                   "status": "erreur"}
+
+    # ---------- connexion Jinka par code email ----------
+
+    def jinka_send_code(self, email):
+        from jinka_login import JinkaCodeLogin
+        self.login = JinkaCodeLogin()
+        self.login_email = email.strip().lower()
+        self.login.send_code(self.login_email)
+
+    def jinka_verify_code(self, code):
+        if not self.login:
+            raise JinkaAuthError("Demande d'abord un code.")
+        token = self.login.verify_code(self.login_email, code)
+        with self.lock:
+            self.state["jinka_auth"] = {"token": token, "email": self.login_email, "at": time.time()}
+            self.state["auth_alert_sent"] = False
+            self.save_state()
+        self.login = None
+        self.scan_now.set()
 
     def loop(self):
         while True:
