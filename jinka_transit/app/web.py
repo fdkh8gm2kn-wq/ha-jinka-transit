@@ -32,7 +32,8 @@ border:1px solid var(--line);background:var(--bg);color:var(--fg);min-width:0;fl
 .flash{padding:10px 14px;border-radius:10px;margin:12px 0;border:1px solid var(--line);background:var(--card)}
 </style></head><body><main>
 <h1>Jinka Transit</h1>
-<div class="muted">Annonces Jinka filtrées par trajet en transports lourds (sans bus)</div>
+<div class="muted">Annonces Jinka filtrées par trajet en transports lourds (sans bus) ·
+<a href="explore">🗺️ Zones compatibles (recherche élargie)</a></div>
 ${flash}<div class="card"><b>Connexion Jinka :</b> ${jinka_status}
 <form method="post" action="jinka/send" class="row"><input type="email" name="email" value="${jinka_email}"
  placeholder="ton email Jinka" required><button>Recevoir un code</button></form>${code_form}</div>
@@ -125,6 +126,8 @@ def start(app, port=8099):
             if path.endswith("/api/state"):
                 return self._send(200, json.dumps({"last_scan": app.last_scan, **app.state},
                                                   ensure_ascii=False), "application/json")
+            if path.rstrip("/").endswith("explore"):
+                return self._send(200, render_explore(app))
             flt = dict(p.split("=", 1) for p in query.split("&") if "=" in p).get("f", "all")
             self._send(200, render(app, flt))
 
@@ -146,7 +149,12 @@ def start(app, port=8099):
                     app.flash = "<span class='ok'>✅ Connecté à Jinka. Premier scan lancé.</span>"
                 except Exception as e:  # noqa: BLE001
                     app.flash = f"<span class='ko'>{html.escape(str(e))}</span>"
-            redirect = "../" if "/jinka/" in self.path else "./"
+            elif path.endswith("explore/start"):
+                try:
+                    app.explore_start(max(3, min(40, int(form.get("radius") or 15))))
+                except Exception as e:  # noqa: BLE001
+                    app.explore_progress = {"error": str(e)}
+            redirect = "../" if "/jinka/" in self.path else "../explore" if "/explore/" in self.path else "./"
             # redirection relative : fonctionne derrière l'Ingress de Home Assistant
             self.send_response(303)
             self.send_header("Location", redirect)
@@ -154,3 +162,83 @@ def start(app, port=8099):
 
     server = ThreadingHTTPServer(("0.0.0.0", port), Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
+
+
+EXPLORE = Template("""<!doctype html><html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Zones compatibles</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+:root{--bg:#fafafa;--fg:#1c1c1c;--muted:#666;--line:#e3e3e3;--card:#fff;--ok:#1a7f37;--ko:#b42318;--accent:#0b63ce}
+@media (prefers-color-scheme:dark){:root{--bg:#111;--fg:#eee;--muted:#9a9a9a;--line:#2a2a2a;--card:#1a1a1a;--ok:#4ac26b;--ko:#f97066;--accent:#5aa2ff}}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 system-ui,-apple-system,sans-serif}
+main{max-width:1100px;margin:0 auto;padding:16px}h1{font-size:20px;margin:0 0 4px}.muted{color:var(--muted)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:12px 0}
+table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:6px;border-top:1px solid var(--line);vertical-align:top}
+th{font-weight:600;color:var(--muted);border-top:0}.ok{color:var(--ok)}.ko{color:var(--ko)}a{color:var(--accent)}
+button{font:inherit;padding:7px 14px;border-radius:8px;border:1px solid var(--accent);background:var(--accent);color:#fff;cursor:pointer}
+input{font:inherit;padding:6px 8px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--fg);width:70px}
+#map{height:460px;border-radius:10px}.wrap{overflow-x:auto}textarea{width:100%;box-sizing:border-box;font:inherit;
+background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px}
+</style></head><body><main>
+<a href="./">← annonces</a>
+<h1>Zones compatibles</h1>
+<div class="muted">Communes d'où ${dests} sont joignables sans bus, depuis le centre de la commune
+(marche jusqu'à la station comprise). À utiliser pour régler le secteur de tes alertes Jinka.</div>
+<div class="card"><form method="post" action="explore/start">Rayon autour de tes adresses :
+<input type="number" name="radius" value="${radius}" min="3" max="40"> km
+<button>${button}</button></form><div style="margin-top:8px">${status}</div></div>
+${content}
+</main></body></html>""")
+
+
+def render_explore(app):
+    esc = html.escape
+    filt = [d for d in app.opts["destinations"] if not d["info_only"]]
+    dests = " et ".join(f"<b>{esc(d['name'])}</b> (≤ {d['max_minutes']} min)" for d in filt) or "tes adresses"
+    prog = app.explore_progress
+    ex = app.state.get("explore")
+    if prog.get("running"):
+        status = (f"⏳ Calcul en cours : {prog.get('done', 0)} / {prog.get('total') or '…'} communes "
+                  f"<script>setTimeout(()=>location.reload(),4000)</script>")
+    elif prog.get("error"):
+        status = f"<span class='ko'>{esc(prog['error'])}</span>"
+    elif ex:
+        n_ok = sum(r["ok"] for r in ex["results"])
+        status = (f"Dernier calcul le {datetime.fromtimestamp(ex['at']).strftime('%d/%m %H:%M')} : "
+                  f"<b class='ok'>{n_ok} communes compatibles</b> sur {len(ex['results'])} "
+                  f"(rayon {ex['radius_km']} km, {ex.get('api_calls', 0)} appels IDFM).")
+    else:
+        status = "Pas encore lancé (compter 2 à 5 minutes)."
+    content = ""
+    if ex and not prog.get("running"):
+        ok_names = [r["nom"] + (f" ({r['cp']})" if r.get("cp") else "") for r in ex["results"] if r["ok"]]
+        heads = "".join(f"<th>{esc(d['name'])}</th>" for d in ex["dests"])
+        rows = []
+        for r in ex["results"]:
+            cells = "".join(
+                f"<td class='{'ok' if t['ok'] else 'ko'}'>{t['minutes'] if t['minutes'] is not None else '—'} min"
+                f"<div class='muted'>{esc(t['summary'] or '')}</div></td>" for t in r["trips"])
+            rows.append(f"<tr><td><b class='{'ok' if r['ok'] else 'ko'}'>{'✅' if r['ok'] else '❌'} "
+                        f"{esc(r['nom'])}</b><div class='muted'>{esc(r.get('cp') or '')} · "
+                        f"{r['distance_km']} km</div></td>{cells}</tr>")
+        points = json.dumps([{"n": r["nom"], "lat": r["lat"], "lon": r["lon"], "ok": r["ok"],
+                              "t": " · ".join(f"{t['name']} {t['minutes'] if t['minutes'] is not None else '—'} min"
+                                              for t in r["trips"])} for r in ex["results"]])
+        dpoints = json.dumps([{"n": d["name"], "lat": d["lat"], "lon": d["lon"]} for d in ex["dests"]])
+        content = f"""<div class="card"><div id="map"></div></div>
+<div class="card"><b>Communes compatibles</b> <span class="muted">(à recopier dans ton alerte Jinka)</span>
+<textarea rows="4" readonly>{esc(', '.join(ok_names)) or 'aucune'}</textarea></div>
+<div class="card wrap"><table><tr><th>Commune</th>{heads}</tr>{''.join(rows)}</table></div>
+<script>
+const pts={points}, dpts={dpoints};
+const map=L.map('map');
+L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png',{{maxZoom:18,attribution:'© OpenStreetMap'}}).addTo(map);
+const b=[];
+pts.forEach(p=>{{b.push([p.lat,p.lon]);L.circleMarker([p.lat,p.lon],{{radius:p.ok?8:5,color:p.ok?'#1a7f37':'#b42318',
+ fillOpacity:p.ok?.7:.35,weight:1}}).bindTooltip(p.n+' — '+p.t).addTo(map)}});
+dpts.forEach(d=>L.marker([d.lat,d.lon]).bindTooltip(d.n,{{permanent:true}}).addTo(map));
+map.fitBounds(b.length?b:dpts.map(d=>[d.lat,d.lon]));
+</script>"""
+    return EXPLORE.substitute(dests=dests, radius=(ex or {}).get("radius_km", 15),
+                              button="Relancer" if ex else "Lancer la recherche", status=status, content=content)

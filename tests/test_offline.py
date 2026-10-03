@@ -118,6 +118,15 @@ def fake_urlopen(req, timeout=None):
         lat = float(q["from"][0].split(";")[1])
         to_lat = float(q["to"][0].split(";")[1])
         return FakeResp({"journeys": journeys_for(lat, to_lat)})
+    if "geo.api.gouv.fr" in url:
+        if "arrondissement" in url:
+            return FakeResp([{"nom": "Paris 15e Arrondissement", "code": "75115", "population": 230000,
+                              "codesPostaux": ["75015"], "centre": {"coordinates": [2.29, 1.0]}}])
+        if "/departements/94/" in url:
+            return FakeResp([{"nom": "Vincennes", "code": "94080", "population": 50000, "codesPostaux": ["94300"],
+                              "centre": {"coordinates": [2.43, 2.0]}},
+                             {"nom": "Loin", "code": "94999", "population": 50000, "centre": {"coordinates": [9.0, 9.0]}}])
+        return FakeResp([])
     if "callmebot" in url:
         calls["whatsapp"].append(url)
         return FakeResp("Message queued. You will receive it in a few seconds.")
@@ -199,4 +208,23 @@ assert len(app.load_options()["destinations"]) == 5
 import web  # noqa: E402
 html = web.render(app, "all")
 assert "Vincennes" in html and "refusée" in html
+
+# Recherche élargie : Paris 15e (lat 1 -> métro OK), Vincennes (lat 2 -> seulement bus), « Loin » hors rayon
+import explore  # noqa: E402
+from transit import Transit  # noqa: E402
+dests = [{"name": "Bureau", "lat": 48.85, "lon": 2.30, "max_minutes": 45, "arrival_time": "09:00", "info_only": False},
+         {"name": "École", "lat": 48.86, "lon": 2.35, "max_minutes": 45, "arrival_time": "08:30", "info_only": False},
+         {"name": "Gare du Nord", "lat": 48.87, "lon": 2.35, "max_minutes": 45, "arrival_time": "09:00",
+          "info_only": True}]
+app.opts["destinations"] = dests
+explore.distance_km = lambda *a: 1.0 if a[2] < 5 else 999  # rayon factice
+prog = {}
+res = explore.run(Transit("k", ["metro", "rer"]), dests, 15, prog, pause=0)
+names = {r["nom"]: r["ok"] for r in res["results"]}
+assert names == {"Paris 15e": True, "Vincennes": False}, names
+assert prog["done"] == 2 and len(res["dests"]) == 2  # l'adresse « pour info » n'entre pas en compte
+app.state["explore"] = res
+page = web.render_explore(app)
+assert "Paris 15e (75015)" in page and "1 communes compatibles" in page
+print("recherche élargie ✔")
 print("\nTous les tests passent ✔")

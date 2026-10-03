@@ -35,6 +35,7 @@ class App:
         self.login = None          # connexion Jinka par code en cours
         self.login_email = ""
         self.flash = ""            # message affiché une fois dans la page
+        self.explore_progress = {}  # recherche élargie en cours
 
     # ---------- config / état ----------
 
@@ -227,6 +228,38 @@ class App:
             self.save_state()
         self.login = None
         self.scan_now.set()
+
+    # ---------- recherche élargie (communes compatibles) ----------
+
+    def explore_start(self, radius_km):
+        if self.explore_progress.get("running"):
+            return
+        o = self.opts
+        if not o.get("prim_api_key"):
+            raise RuntimeError("Renseigne d'abord prim_api_key dans la configuration.")
+        if not [d for d in o["destinations"] if not d["info_only"]]:
+            raise RuntimeError("Aucune adresse de filtre configurée.")
+        self.explore_progress = {"running": True, "done": 0, "total": 0, "error": None}
+        threading.Thread(target=self._explore, args=(radius_km,), daemon=True).start()
+
+    def _explore(self, radius_km):
+        import explore
+        try:
+            transit = Transit(self.opts["prim_api_key"], self.opts.get("allowed_modes"),
+                              self.opts.get("max_walk_minutes", 15))
+            with self.lock:
+                dests = self.resolve_destinations(transit)
+            result = explore.run(transit, dests, radius_km, self.explore_progress)
+            with self.lock:
+                self.state["explore"] = result
+                self.save_state()
+            ok = sum(r["ok"] for r in result["results"])
+            log.info("Recherche élargie terminée : %d communes compatibles sur %d.", ok, len(result["results"]))
+        except Exception as e:  # noqa: BLE001
+            log.error("Recherche élargie échouée : %s", e)
+            self.explore_progress["error"] = str(e)
+        finally:
+            self.explore_progress["running"] = False
 
     def loop(self):
         while True:

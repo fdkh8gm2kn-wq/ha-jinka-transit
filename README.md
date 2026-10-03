@@ -54,6 +54,12 @@ s'affichent seulement dans l'interface (puis supprime `local/state.json` avant d
 
 Les données (annonces déjà vues) sont dans `/data` de l'add-on, incluses dans les sauvegardes HA.
 
+## Zones compatibles (recherche élargie)
+
+Lien « 🗺️ Zones compatibles » dans la page de l'add-on : calcule, sans Jinka, toutes les communes
+(et arrondissements de Paris) d'où tes adresses de filtre sont joignables sans bus dans le temps voulu,
+depuis le centre de chaque commune. Carte + liste à recopier dans le secteur de ton alerte Jinka.
+
 ## Réglages
 
 - **destinations** : jusqu'à 5. Chaque ligne : `name`, `address` (adresse postale, « Gare de Lyon »,
