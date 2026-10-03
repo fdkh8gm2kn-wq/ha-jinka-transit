@@ -80,8 +80,13 @@ def find_code(host, user, password, since_ts):
             pass
 
 
+SKIP_FLAGS = ("\\Sent", "\\Drafts", "\\Trash", "\\Noselect", "\\All", "\\Archive")
+SKIP_NAMES = re.compile(r"sent|envoy|draft|brouillon|trash|corbeille|deleted|supprim", re.I)
+
+
 def folders(imap):
-    """Boîte de réception puis dossiers spam/indésirables."""
+    """Réception d'abord, puis tous les autres dossiers (spam, « Infos et promos »…) sauf
+    envoyés, brouillons et corbeille."""
     out = ["INBOX"]
     typ, data = imap.list()
     if typ == "OK":
@@ -91,8 +96,9 @@ def folders(imap):
             if not m:
                 continue
             name = m.group("name").strip().strip('"')
-            if ("\\Junk" in m.group("flags") or re.search(r"spam|junk|ind[ée]sirable", name, re.I)) \
-                    and f'"{name}"' not in out:
+            if name.upper() == "INBOX" or any(f in m.group("flags") for f in SKIP_FLAGS) or SKIP_NAMES.search(name):
+                continue
+            if f'"{name}"' not in out:
                 out.append(f'"{name}"')
     return out
 

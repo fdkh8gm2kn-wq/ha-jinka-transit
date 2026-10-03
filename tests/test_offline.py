@@ -254,8 +254,10 @@ assert mailbox.imap_host("x@gmail.com") == "imap.gmail.com" and mailbox.imap_hos
 class FakeImap:
     def list(self):
         return "OK", [b'(\\HasNoChildren) "/" "INBOX"', b'(\\HasNoChildren \\Junk) "/" "[Gmail]/Spam"',
-                      b'(\\HasNoChildren) "." "Courrier ind\xc3\xa9sirable"']
-assert mailbox.folders(FakeImap()) == ["INBOX", '"[Gmail]/Spam"', '"Courrier ind\u00e9sirable"'], mailbox.folders(FakeImap())
+                      b'(\\HasNoChildren) "." "Courrier ind\xc3\xa9sirable"', b'(\\HasNoChildren) "/" "SF_PROMO"',
+                      b'(\\HasNoChildren \\Sent) "/" "SF_SENT"', b'(\\HasNoChildren) "/" "Corbeille"']
+assert mailbox.folders(FakeImap()) == ["INBOX", '"[Gmail]/Spam"', '"Courrier ind\u00e9sirable"', '"SF_PROMO"'], \
+    mailbox.folders(FakeImap())
 
 # Reconnexion automatique : jeton refusé -> code demandé, lu dans la boîte, validé, scan qui repart
 import jinka_login  # noqa: E402
