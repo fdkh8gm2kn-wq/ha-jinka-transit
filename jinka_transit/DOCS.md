@@ -9,7 +9,7 @@ d'arrivée choisie, marche comprise (porte à porte).
 
 ## Installation en un clic
 
-[![Ajouter le dépôt à Home Assistant](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fnicolastc59boobs%2Fha-jinka-transit)
+[![Ajouter le dépôt à Home Assistant](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Ffdkh8gm2kn-wq%2Fha-jinka-transit)
 
 Clique, confirme dans Home Assistant, puis installe **Jinka Transit** dans la boutique d'add-ons.
 
