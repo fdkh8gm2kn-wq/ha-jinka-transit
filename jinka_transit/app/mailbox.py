@@ -1,0 +1,134 @@
+"""Lecture du code de connexion Jinka dans une boîte mail dédiée (IMAP), pour une reconnexion
+100 % automatique."""
+
+import email
+import imaplib
+import logging
+import re
+import time
+from datetime import datetime, timedelta
+from email.header import decode_header, make_header
+from email.utils import parsedate_to_datetime
+from html import unescape
+
+from jinka import JinkaAuthError
+
+# Serveur IMAP déduit du domaine de l'adresse (si mail_imap_server est vide)
+IMAP_HOSTS = {
+    "gmail.com": "imap.gmail.com", "googlemail.com": "imap.gmail.com",
+    "gmx.fr": "imap.gmx.net", "gmx.com": "imap.gmx.net", "gmx.net": "imap.gmx.net",
+    "laposte.net": "imap.laposte.net", "orange.fr": "imap.orange.fr", "wanadoo.fr": "imap.orange.fr",
+    "free.fr": "imap.free.fr", "sfr.fr": "imap.sfr.fr", "icloud.com": "imap.mail.me.com",
+    "me.com": "imap.mail.me.com", "yahoo.fr": "imap.mail.yahoo.com", "yahoo.com": "imap.mail.yahoo.com",
+    "outlook.fr": "outlook.office365.com", "outlook.com": "outlook.office365.com",
+    "hotmail.fr": "outlook.office365.com", "hotmail.com": "outlook.office365.com",
+}
+
+log = logging.getLogger("mailbox")
+
+
+def imap_host(address, configured=""):
+    if configured:
+        return configured.strip()
+    domain = address.rsplit("@", 1)[-1].lower()
+    return IMAP_HOSTS.get(domain, f"imap.{domain}")
+
+
+def wait_for_code(host, user, password, since_ts, timeout=240, poll=10):
+    """Attend l'email de Jinka arrivé après `since_ts` et renvoie le code à 4 chiffres."""
+    deadline = time.time() + timeout
+    while True:
+        code = find_code(host, user, password, since_ts)
+        if code:
+            return code
+        if time.time() > deadline:
+            raise JinkaAuthError(f"Aucun email de code Jinka reçu dans {user} en {timeout // 60} min.")
+        time.sleep(poll)
+
+
+def find_code(host, user, password, since_ts):
+    try:
+        imap = imaplib.IMAP4_SSL(host, 993, timeout=30)
+    except OSError as e:
+        raise JinkaAuthError(f"Serveur mail {host} injoignable : {e}") from None
+    try:
+        try:
+            imap.login(user, password)
+        except imaplib.IMAP4.error:
+            raise JinkaAuthError(f"Connexion à la boîte mail {user} refusée : vérifie le mot de passe "
+                                 "(mot de passe d'application pour Gmail).") from None
+        for folder in folders(imap):
+            if imap.select(folder, readonly=True)[0] != "OK":
+                continue
+            day = (datetime.fromtimestamp(since_ts) - timedelta(days=1)).strftime("%d-%b-%Y")
+            typ, data = imap.search(None, "SINCE", day)
+            if typ != "OK":
+                continue
+            for num in reversed(data[0].split()[-30:]):
+                typ, msg_data = imap.fetch(num, "(RFC822)")
+                if typ != "OK" or not msg_data or not isinstance(msg_data[0], tuple):
+                    continue
+                code = code_from_message(email.message_from_bytes(msg_data[0][1]), since_ts)
+                if code:
+                    log.info("Code Jinka trouvé dans %s.", folder)
+                    return code
+        return None
+    finally:
+        try:
+            imap.logout()
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def folders(imap):
+    """Boîte de réception puis dossiers spam/indésirables."""
+    out = ["INBOX"]
+    typ, data = imap.list()
+    if typ == "OK":
+        for line in data or []:
+            line = line.decode(errors="ignore")
+            m = re.match(r'\((?P<flags>[^)]*)\) (?:"[^"]*"|NIL) (?P<name>.+)$', line)
+            if not m:
+                continue
+            name = m.group("name").strip().strip('"')
+            if ("\\Junk" in m.group("flags") or re.search(r"spam|junk|ind[ée]sirable", name, re.I)) \
+                    and f'"{name}"' not in out:
+                out.append(f'"{name}"')
+    return out
+
+
+def code_from_message(msg, since_ts):
+    sender = str(make_header(decode_header(msg.get("From", ""))))
+    if "jinka" not in sender.lower():
+        return None
+    try:
+        sent = parsedate_to_datetime(msg.get("Date")).timestamp()
+    except (TypeError, ValueError):
+        sent = 0
+    if sent and sent < since_ts - 120:  # ancien code : on ignore
+        return None
+    subject = str(make_header(decode_header(msg.get("Subject", ""))))
+    return extract_code(subject + "\n" + body_text(msg))
+
+
+def body_text(msg):
+    parts = []
+    for part in msg.walk() if msg.is_multipart() else [msg]:
+        ctype = part.get_content_type()
+        if ctype in ("text/plain", "text/html"):
+            payload = part.get_payload(decode=True) or b""
+            text = payload.decode(part.get_content_charset() or "utf-8", "replace")
+            if ctype == "text/html":
+                text = unescape(re.sub(r"<[^>]+>", " ", re.sub(r"(?is)<(style|script).*?</\1>", " ", text)))
+            parts.append(text)
+    return "\n".join(parts)
+
+
+def extract_code(text):
+    """Le code à 4 chiffres : de préférence juste après le mot « code », en évitant les années."""
+    years = {str(y) for y in range(datetime.now().year - 2, datetime.now().year + 3)}
+    m = re.search(r"code\D{0,80}?\b(\d{4})\b", text, re.I)
+    if m and m.group(1) not in years:
+        return m.group(1)
+    candidates = [c for c in re.findall(r"(?<![\d.,/:])\b(\d{4})\b(?![\d.,/:])", text) if c not in years]
+    return candidates[0] if len(set(candidates)) == 1 else None

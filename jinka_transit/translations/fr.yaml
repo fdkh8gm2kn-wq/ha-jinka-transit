@@ -1,12 +1,23 @@
 configuration:
   jinka_email:
     name: Email Jinka
-    description: Seulement si ton compte Jinka a un mot de passe. Sinon, utilise le jeton.
+    description: Adresse de ton compte Jinka (sert aussi à la connexion automatique par code email).
   jinka_password:
     name: Mot de passe Jinka
   jinka_token:
     name: Jeton Jinka
     description: Valeur du cookie LA_API_TOKEN sur jinka.fr (comptes Google/Apple/code email). Voir la doc.
+  mail_password:
+    name: Mot de passe de la boîte mail dédiée
+    description: >-
+      Pour la connexion 100 % automatique : l'add-on lit lui-même le code Jinka reçu sur l'email Jinka
+      ci-dessus. Gmail : mot de passe d'application. Laisse vide pour te connecter à la main.
+  mail_user:
+    name: Identifiant IMAP (optionnel)
+    description: Vide = l'email Jinka.
+  mail_imap_server:
+    name: Serveur IMAP (optionnel)
+    description: Vide = deviné d'après l'adresse (Gmail, GMX, laposte.net, Orange, Free, iCloud…).
   jinka_alerts:
     name: Alertes à surveiller
     description: Noms ou identifiants de tes alertes Jinka (= les secteurs). Vide = toutes.

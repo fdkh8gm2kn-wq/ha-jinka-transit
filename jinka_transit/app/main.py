@@ -134,15 +134,22 @@ class App:
         dests = self.resolve_destinations(transit)
         crit = self.criteria_hash()
 
+        done = {k for k, v in self.state["listings"].items()
+                if v["status"] in ("notified", "silent") or v.get("crit") == crit}
         try:
-            done = {k for k, v in self.state["listings"].items()
-                    if v["status"] in ("notified", "silent") or v.get("crit") == crit}
-            listings = jinka.listings(o.get("jinka_alerts"), int(o.get("max_pages_per_alert", 3)), known=done)
+            try:
+                listings = jinka.listings(o.get("jinka_alerts"), int(o.get("max_pages_per_alert", 3)), known=done)
+            except JinkaAuthError:
+                if not self.auto_login_possible():
+                    raise
+                jinka = Jinka(token=self.auto_login())
+                listings = jinka.listings(o.get("jinka_alerts"), int(o.get("max_pages_per_alert", 3)), known=done)
             self.state["auth_alert_sent"] = False
         except JinkaAuthError as e:
             if not self.state.get("auth_alert_sent"):
                 notifier.send("Jinka Transit : connexion Jinka impossible",
-                              f"{e}\nReconnecte-toi depuis la page de l'add-on (code par email).")
+                              f"{e}\nVérifie la boîte mail dédiée dans la configuration, ou reconnecte-toi "
+                              "depuis la page de l'add-on (code par email).")
                 self.state["auth_alert_sent"] = True
                 self.save_state()
             raise
@@ -260,6 +267,33 @@ class App:
             self.explore_progress["error"] = str(e)
         finally:
             self.explore_progress["running"] = False
+
+    # ---------- reconnexion automatique (code lu dans la boîte mail dédiée) ----------
+
+    def auto_login_possible(self):
+        o = self.opts
+        return bool(o.get("jinka_email") and o.get("mail_password") and not o.get("jinka_token")
+                    and time.time() - self.state.get("auto_login_at", 0) > 20 * 60)
+
+    def auto_login(self):
+        """Demande un code à Jinka, le lit dans la boîte mail et se connecte. Une tentative / 20 min."""
+        from jinka_login import JinkaCodeLogin
+        import mailbox
+        o = self.opts
+        email_addr = o["jinka_email"].strip().lower()
+        self.state["auto_login_at"] = time.time()
+        log.info("Connexion automatique à Jinka : demande d'un code pour %s.", email_addr)
+        login = JinkaCodeLogin()
+        since = time.time()
+        login.send_code(email_addr)
+        user = o.get("mail_user") or email_addr
+        code = mailbox.wait_for_code(mailbox.imap_host(user, o.get("mail_imap_server")), user,
+                                     o["mail_password"], since)
+        token = login.verify_code(email_addr, code)
+        self.state["jinka_auth"] = {"token": token, "email": email_addr, "at": time.time(), "auto": True}
+        self.save_state()
+        log.info("Connexion automatique à Jinka réussie.")
+        return token
 
     def loop(self):
         while True:

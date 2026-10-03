@@ -227,4 +227,44 @@ app.state["explore"] = res
 page = web.render_explore(app)
 assert "Paris 15e (75015)" in page and "1 communes compatibles" in page
 print("recherche élargie ✔")
+# Lecture du code dans un email Jinka
+import mailbox  # noqa: E402
+from email.message import EmailMessage  # noqa: E402
+assert mailbox.extract_code("Votre code de connexion : 4821. © 2026 Jinka") == "4821"
+assert mailbox.extract_code("<p>Bonjour</p><p>Saisissez ce code</p><h1>0937</h1> 2026") == "0937"
+assert mailbox.extract_code("Jinka 2026, 75015 Paris") is None
+msg = EmailMessage()
+msg["From"] = "Jinka <noreply@jinka.fr>"
+msg["Subject"] = "Ton code Jinka"
+msg["Date"] = "Sat, 03 Oct 2026 10:00:00 +0200"
+msg.set_content("Bonjour,\nVoici ton code : 5512\n")
+msg.add_alternative("<html><body><p>Voici ton code</p><b>5512</b></body></html>", subtype="html")
+import email.utils as eu  # noqa: E402
+sent = eu.parsedate_to_datetime(msg["Date"]).timestamp()
+assert mailbox.code_from_message(msg, sent - 30) == "5512"
+assert mailbox.code_from_message(msg, sent + 3600) is None  # email trop ancien
+msg.replace_header("From", "pub@autre.fr")
+assert mailbox.code_from_message(msg, sent - 30) is None
+assert mailbox.imap_host("x@gmail.com") == "imap.gmail.com" and mailbox.imap_host("x@gmx.fr") == "imap.gmx.net"
+
+class FakeImap:
+    def list(self):
+        return "OK", [b'(\\HasNoChildren) "/" "INBOX"', b'(\\HasNoChildren \\Junk) "/" "[Gmail]/Spam"',
+                      b'(\\HasNoChildren) "." "Courrier ind\xc3\xa9sirable"']
+assert mailbox.folders(FakeImap()) == ["INBOX", '"[Gmail]/Spam"', '"Courrier ind\u00e9sirable"'], mailbox.folders(FakeImap())
+
+# Reconnexion automatique : jeton refusé -> code demandé, lu dans la boîte, validé, scan qui repart
+import jinka_login  # noqa: E402
+sent_codes = []
+class FakeLogin:
+    def send_code(self, e): sent_codes.append(e)
+    def verify_code(self, e, c): assert c == "7777"; return "tok"
+jinka_login.JinkaCodeLogin = FakeLogin
+mailbox.wait_for_code = lambda host, user, pwd, since: "7777"
+app.opts.update(jinka_email="moi@gmx.fr", jinka_password="", jinka_token="", mail_password="x")
+app.state.pop("jinka_auth", None); app.state["auto_login_at"] = 0
+assert app.auto_login_possible()
+assert app.auto_login() == "tok" and sent_codes == ["moi@gmx.fr"]
+assert app.state["jinka_auth"]["token"] == "tok" and not app.auto_login_possible()  # 1 essai / 20 min
+print("connexion automatique par email ✔")
 print("\nTous les tests passent ✔")
