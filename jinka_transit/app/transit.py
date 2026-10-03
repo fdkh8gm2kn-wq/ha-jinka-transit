@@ -4,6 +4,7 @@ import datetime as dt
 import json
 import logging
 import re
+import time
 
 from http_util import HttpError, get_json
 
@@ -19,6 +20,9 @@ MODE_MAP = {
 }
 # Modes existants qu'on interdit explicitement s'ils ne sont pas autorisés (le bus l'est toujours)
 KNOWN_MODES = {"Bus", "Metro", "Funicular", "RapidTransit", "LocalTrain", "Train", "Tramway"}
+
+# Durée de validité d'un trajet en cache (les horaires bougent peu)
+CACHE_TTL = 30 * 24 * 3600
 
 log = logging.getLogger("transit")
 
@@ -45,6 +49,8 @@ class Transit:
             self.allowed |= MODE_MAP.get(m, set())
         self.forbidden = sorted(KNOWN_MODES - self.allowed)
         self.max_walk = int(max_walk_minutes)
+        self.api_calls = 0
+        self.cache_hits = 0
 
     def _prim(self, path, params):
         try:
@@ -97,11 +103,31 @@ class Transit:
 
     # ---------- itinéraires ----------
 
-    def journey(self, from_lat, from_lon, to_lat, to_lon, arrival_hhmm, max_minutes):
+    def journey(self, from_lat, from_lon, to_lat, to_lon, arrival_hhmm, max_minutes, cache=None):
         """Meilleur trajet en transports lourds uniquement.
 
-        Renvoie {"ok", "minutes", "summary", "reason"}. "ok" vaut True si un trajet sans bus
-        existe et dure au plus max_minutes (marche comprise)."""
+        Renvoie {"ok", "minutes", "summary", "steps", "reason"}. "ok" vaut True si un trajet sans bus
+        existe et dure au plus max_minutes (marche comprise). Le trajet brut est mis en cache : changer
+        une durée max ne relance aucun appel à l'API."""
+        key = (f"{from_lat:.4f},{from_lon:.4f}>{to_lat:.5f},{to_lon:.5f}@{arrival_hhmm}"
+               f"|{','.join(sorted(self.allowed))}|{self.max_walk}")
+        hit = cache.get(key) if cache is not None else None
+        if hit and time.time() - hit["ts"] < CACHE_TTL:
+            best, self.cache_hits = hit["best"], self.cache_hits + 1
+        else:
+            best = self._fetch_best(from_lat, from_lon, to_lat, to_lon, arrival_hhmm)
+            if cache is not None:
+                cache[key] = {"best": best, "ts": time.time()}
+        if best.get("none"):
+            err = best.get("error")
+            return {"ok": False, "minutes": None, "summary": "", "steps": [],
+                    "reason": "aucun trajet métro/RER" + (f" ({err})" if err else "")}
+        r = dict(best)
+        r["ok"] = r["minutes"] <= max_minutes
+        r["reason"] = "" if r["ok"] else f"{r['minutes']} min > {max_minutes} min"
+        return r
+
+    def _fetch_best(self, from_lat, from_lon, to_lat, to_lon, arrival_hhmm):
         params = [
             ("from", f"{from_lon:.6f};{from_lat:.6f}"),
             ("to", f"{to_lon:.6f};{to_lat:.6f}"),
@@ -113,19 +139,16 @@ class Transit:
             ("count", 5),
         ]
         params += [("forbidden_uris[]", f"physical_mode:{m}") for m in self.forbidden]
+        self.api_calls += 1
         data = self._prim("/journeys", params) or {}
-
         best = None
         for j in data.get("journeys") or []:
             check = self.check_journey(j)
             if check["valid"] and (best is None or check["minutes"] < best["minutes"]):
                 best = check
         if best is None:
-            err = (data.get("error") or {}).get("message")
-            return {"ok": False, "minutes": None, "summary": "",
-                    "reason": "aucun trajet métro/RER" + (f" ({err})" if err else "")}
-        best["ok"] = best["minutes"] <= max_minutes
-        best["reason"] = "" if best["ok"] else f"{best['minutes']} min > {max_minutes} min"
+            return {"none": True, "error": (data.get("error") or {}).get("message")}
+        best.pop("valid")
         return best
 
     def check_journey(self, j):

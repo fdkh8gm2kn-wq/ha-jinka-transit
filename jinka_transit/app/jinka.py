@@ -59,8 +59,11 @@ class Jinka:
         data = self._get("/alert")
         return data if isinstance(data, list) else []
 
-    def listings(self, alert_filter=None, max_pages=3):
-        """Renvoie les annonces (normalisées) des alertes choisies, les plus récentes d'abord."""
+    def listings(self, alert_filter=None, max_pages=3, known=()):
+        """Renvoie les annonces (normalisées) des alertes choisies, les plus récentes d'abord.
+
+        Jinka trie du plus récent au plus ancien : dès qu'une page ne contient que des annonces
+        déjà traitées (`known`), on arrête de paginer cette alerte."""
         wanted = {str(a).strip().lower() for a in (alert_filter or []) if str(a).strip()}
         seen = set()
         out = []
@@ -75,11 +78,17 @@ class Jinka:
             page = 1
             while page <= max_pages:
                 data = self._get(f"/alert/{alert_id}/dashboard", {"filter": "all", "page": page}) or {}
-                for ad in data.get("ads") or []:
+                ads = data.get("ads") or []
+                fresh = 0
+                for ad in ads:
                     item = normalize(ad, alert_id, name)
                     if item["id"] and item["id"] not in seen:
                         seen.add(item["id"])
                         out.append(item)
+                        fresh += item["id"] not in known
+                if ads and not fresh:
+                    log.info("Alerte « %s » : rien de nouveau après la page %d.", name, page)
+                    break
                 pagination = data.get("pagination") or {}
                 nb_pages = pagination.get("nbPages") or pagination.get("nb_pages") or 1
                 if page >= int(nb_pages):

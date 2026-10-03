@@ -160,8 +160,11 @@ assert len(calls["prim"]) == n_prim and len(calls["whatsapp"]) == 1
 OPTIONS["destinations"][1]["max_minutes"] = 45
 json.dump(OPTIONS, open(os.environ["OPTIONS_PATH"], "w"))
 app.opts = app.load_options()
-app.scan()
+n_prim = len(calls["prim"])
+st = app.scan()
 assert L["ad3"]["status"] == "notified", L["ad3"]
+assert len(calls["prim"]) == n_prim and st["trajets en cache"] >= 1, st  # tout vient du cache
+print("changement de durée sans aucun appel IDFM ✔")
 assert L["ad1"]["status"] == "notified" and len(calls["whatsapp"]) == 2
 print("ad3 envoyée après passage de l'école à 45 min ✔")
 

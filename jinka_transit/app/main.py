@@ -12,7 +12,7 @@ from datetime import datetime
 from fmt import body_of, title_of
 from jinka import Jinka, JinkaAuthError
 from notify import Notifier
-from transit import Transit, TransitError
+from transit import CACHE_TTL, Transit, TransitError
 import web
 
 OPTIONS_PATH = os.environ.get("OPTIONS_PATH", "/data/options.json")
@@ -70,6 +70,8 @@ class App:
         if len(items) > MAX_STATE_ENTRIES:
             keep = sorted(items.items(), key=lambda kv: kv[1].get("ts", 0), reverse=True)
             self.state["listings"] = dict(keep[:MAX_STATE_ENTRIES])
+        cutoff = time.time() - CACHE_TTL
+        self.state["journeys"] = {k: v for k, v in self.state.get("journeys", {}).items() if v["ts"] > cutoff}
         tmp = STATE_PATH + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(self.state, f, ensure_ascii=False)
@@ -99,7 +101,7 @@ class App:
         results = []
         for d in dests:
             r = transit.journey(listing["lat"], listing["lng"], d["lat"], d["lon"],
-                                d["arrival_time"], d["max_minutes"])
+                                d["arrival_time"], d["max_minutes"], cache=self.state.setdefault("journeys", {}))
             results.append({"name": d["name"], "max": d["max_minutes"], **r})
             if not r["ok"]:
                 return "rejected", results, f"{d['name']} : {r['reason']}"
@@ -120,7 +122,9 @@ class App:
         crit = self.criteria_hash()
 
         try:
-            listings = jinka.listings(o.get("jinka_alerts"), int(o.get("max_pages_per_alert", 3)))
+            done = {k for k, v in self.state["listings"].items()
+                    if v["status"] in ("notified", "silent") or v.get("crit") == crit}
+            listings = jinka.listings(o.get("jinka_alerts"), int(o.get("max_pages_per_alert", 3)), known=done)
             self.state["auth_alert_sent"] = False
         except JinkaAuthError as e:
             if not self.state.get("auth_alert_sent"):
@@ -171,6 +175,8 @@ class App:
         self.state["first_run_done"] = True
         self.save_state()
         stats["envoyées"] = sent
+        stats["appels IDFM"] = transit.api_calls
+        stats["trajets en cache"] = transit.cache_hits
         return stats
 
     def run_once(self):
