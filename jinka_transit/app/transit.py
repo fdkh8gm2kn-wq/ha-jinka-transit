@@ -144,6 +144,7 @@ class Transit:
             ("first_section_mode[]", "walking"),
             ("last_section_mode[]", "walking"),
             ("max_walking_duration_to_pt", self.max_walk * 60),
+            ("max_walking_direct_path_duration", self.max_walk * 60),
             ("count", 5),
         ]
         params += [("forbidden_uris[]", f"physical_mode:{m}") for m in self.forbidden]
@@ -206,6 +207,8 @@ class Transit:
         if walks and steps[-1] is walks[-1] and len(steps) > 1:
             steps[-1]["role"] = "end"
         minutes = round(j.get("duration", 0) / 60)
+        if not lines and minutes > self.max_walk:  # trajet tout à pied : seulement s'il est court
+            return {"valid": False}
         summary = " → ".join(lines) if lines else "à pied"
         return {"valid": True, "minutes": minutes, "walk_minutes": round(walk / 60),
                 "transfers": j.get("nb_transfers", 0), "summary": summary, "steps": steps}

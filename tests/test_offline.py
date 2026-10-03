@@ -226,6 +226,10 @@ assert prog["done"] == 2 and len(res["dests"]) == 2  # l'adresse « pour info »
 app.state["explore"] = res
 page = web.render_explore(app)
 assert "Paris 15e (75015)" in page and "1 communes compatibles" in page
+# trajet tout à pied de 44 min : refusé (marche max 15 min)
+long_walk = Transit("k", ["metro"], 15).check_journey({"duration": 44 * 60, "sections": [walk(44 * 60)]})
+short_walk = Transit("k", ["metro"], 15).check_journey({"duration": 11 * 60, "sections": [walk(11 * 60)]})
+assert not long_walk["valid"] and short_walk["valid"] and short_walk["summary"] == "à pied"
 print("recherche élargie ✔")
 # Lecture du code dans un email Jinka
 import mailbox  # noqa: E402
