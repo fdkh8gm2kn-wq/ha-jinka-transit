@@ -26,7 +26,7 @@ class Jinka:
             self.token = self.static_token
             return
         if not (self.email and self.password):
-            raise JinkaAuthError("Renseigne jinka_token, ou jinka_email + jinka_password.")
+            raise JinkaAuthError("Pas connecté à Jinka : ouvre la page de l'add-on et connecte-toi avec le code reçu par email.")
         try:
             data = get_json(
                 f"{API}/user/auth",
