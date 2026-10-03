@@ -57,7 +57,8 @@ def render(app, flt):
     for v in items[:300]:
         l = v["listing"]
         trips = "<br>".join(
-            f"<span class='{'ok' if r['ok'] else 'ko'}'>{esc(r['name'])} : "
+            f"<span class='{'muted' if r.get('info_only') else 'ok' if r['ok'] else 'ko'}'>"
+            f"{esc(r['name'])}{' (info)' if r.get('info_only') else ''} : "
             f"{r['minutes'] if r.get('minutes') is not None else '—'} min</span> "
             f"<span class='muted'>{esc(r.get('summary') or r.get('reason') or '')}</span>"
             + (f"<details><summary class='muted'>itinéraire</summary><div class='muted' style='white-space:pre-line'>"

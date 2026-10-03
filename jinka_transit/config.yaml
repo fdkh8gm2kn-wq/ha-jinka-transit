@@ -1,5 +1,5 @@
 name: Jinka Transit
-version: "1.0.0"
+version: "1.1.0"
 slug: jinka_transit
 description: Annonces Jinka filtrées par temps de trajet en métro/RER/tram (sans bus) vers tes adresses
 url: https://github.com/fdkh8gm2kn-wq/ha-jinka-transit
@@ -30,6 +30,11 @@ options:
       address: "1 rue de Rivoli, 75001 Paris"
       max_minutes: 45
       arrival_time: "08:30"
+    - name: Gare du Nord
+      address: "18 rue de Dunkerque, 75010 Paris"
+      max_minutes: 45
+      arrival_time: "09:00"
+      info_only: true
   allowed_modes:
     - metro
     - rer
@@ -56,6 +61,7 @@ schema:
       address: str
       max_minutes: "int(5,180)"
       arrival_time: "match(^([01][0-9]|2[0-3]):[0-5][0-9]$)"
+      info_only: "bool?"
   allowed_modes:
     - "list(metro|rer|transilien|tram)"
   max_rent: "int(0,100000)"

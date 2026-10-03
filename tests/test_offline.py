@@ -22,6 +22,8 @@ OPTIONS = {
     "destinations": [
         {"name": "Bureau", "address": "48.85,2.30", "max_minutes": 45, "arrival_time": "09:00"},
         {"name": "École", "address": "48.86,2.35", "max_minutes": 30, "arrival_time": "08:30"},
+        {"name": "Gare du Nord", "address": "48.87,2.35", "max_minutes": 45, "arrival_time": "09:00",
+         "info_only": True},
     ],
     "allowed_modes": ["metro", "rer", "tram"], "max_walk_minutes": 15,
     "whatsapp_phone": "+33600000000", "whatsapp_callmebot_apikey": "123", "ha_notify_service": "",
@@ -63,6 +65,9 @@ def walk(d, frm=None, to=None, length=None):
 
 
 def journeys_for(lat, to_lat):
+    if abs(to_lat - 48.87) < 1e-6:  # adresse pour info : 90 min, ne doit pas filtrer
+        return [{"duration": 90 * 60, "nb_transfers": 0,
+                 "sections": [walk(60), pt("RER", "B", "RapidTransit", 5000, "Gare A", "Gare du Nord"), walk(60)]}]
     if lat == 1.0:
         return [{"duration": 25 * 60, "nb_transfers": 1,
                  "sections": [walk(300, to=stop("Vincennes"), length=420),
@@ -150,6 +155,10 @@ for frag in ("jusqu'à *Vincennes*", "420 m", "*RER A* (dir. Saint-Germain-en-La
              "Correspondance à Nation : 3 min à pied, 150 m + 2 min d'attente",
              "*Métro 1* (dir. La Défense) : Nation → Concorde", "de *Concorde* jusqu'à Bureau", "1 correspondance"):
     assert frag in text, frag
+assert "ℹ️ *Gare du Nord* (pour info) — 90 min" in text
+# l'adresse pour info n'est jamais calculée pour les annonces refusées
+assert not any(abs(float(q["to"][0].split(";")[1]) - 48.87) < 1e-6 and float(q["from"][0].split(";")[1]) == 2.0
+               for q in calls["prim"])
 
 # 2e scan : rien de nouveau, aucun appel IDFM ni message
 n_prim = len(calls["prim"])
@@ -163,7 +172,8 @@ app.opts = app.load_options()
 n_prim = len(calls["prim"])
 st = app.scan()
 assert L["ad3"]["status"] == "notified", L["ad3"]
-assert len(calls["prim"]) == n_prim and st["trajets en cache"] >= 1, st  # tout vient du cache
+# filtre entièrement en cache ; seul le trajet « pour info » (jamais calculé avant) est demandé
+assert len(calls["prim"]) == n_prim + 1 and st["trajets en cache"] >= 2, st
 print("changement de durée sans aucun appel IDFM ✔")
 assert L["ad1"]["status"] == "notified" and len(calls["whatsapp"]) == 2
 print("ad3 envoyée après passage de l'école à 45 min ✔")

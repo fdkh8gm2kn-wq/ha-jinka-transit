@@ -57,11 +57,15 @@ def body_of(v):
     l = v["listing"]
     lines = []
     for r in v["results"]:
+        lines.append("")
+        if r.get("minutes") is None:
+            lines.append(f"ℹ️ *{r['name']}* (pour info) — {r.get('reason') or 'pas de trajet'}")
+            continue
         transfers = r.get("transfers", 0)
         corr = "direct" if not transfers else f"{transfers} correspondance{'s' if transfers > 1 else ''}"
-        lines.append("")
-        lines.append(f"📍 *{r['name']}* — {r['minutes']} min porte à porte (max {r.get('max', '?')}) · "
-                     f"{r.get('walk_minutes', 0)} min à pied · {corr}")
+        head = (f"ℹ️ *{r['name']}* (pour info) — {r['minutes']} min porte à porte" if r.get("info_only")
+                else f"📍 *{r['name']}* — {r['minutes']} min porte à porte (max {r.get('max', '?')})")
+        lines.append(f"{head} · {r.get('walk_minutes', 0)} min à pied · {corr}")
         lines.extend(steps_of(r))
     lines.append("")
     lines.append(f"🔗 {l['link']}")

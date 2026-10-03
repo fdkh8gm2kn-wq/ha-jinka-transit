@@ -55,6 +55,8 @@ Les données (annonces déjà vues) sont dans `/data` de l'add-on, incluses dans
 - **destinations** : jusqu'à 5. Chaque ligne : `name`, `address` (adresse postale, « Gare de Lyon »,
   ou `48.85,2.30`), `max_minutes`, `arrival_time` (heure d'arrivée visée un jour ouvré).
   Une annonce n'est envoyée que si **toutes** les adresses respectent leur durée.
+  Ajoute `info_only: true` à une adresse pour avoir seulement son trajet dans le message, sans filtrer
+  (ex. Gare du Nord) : il n'est calculé que pour les annonces retenues.
 - **max_rent** : loyer max en € (0 = pas de limite). Les annonces plus chères sont écartées sans calcul de trajet.
 - **allowed_modes** : `metro`, `rer`, `transilien`, `tram`. Le bus est toujours exclu.
 - **max_walk_minutes** : marche max entre le logement / l'adresse et la station.

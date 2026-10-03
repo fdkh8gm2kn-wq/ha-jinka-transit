@@ -47,6 +47,7 @@ class App:
             d["name"] = (d.get("name") or f"Adresse {i + 1}").strip()
             d["max_minutes"] = int(d.get("max_minutes") or 45)
             d["arrival_time"] = d.get("arrival_time") or "09:00"
+            d["info_only"] = bool(d.get("info_only"))
         opts["destinations"] = dests
         return opts
 
@@ -98,13 +99,20 @@ class App:
             return "rejected", [], f"loyer {int(listing['rent'])} € > {max_rent} €"
         if listing["lat"] is None or listing["lng"] is None:
             return "rejected", [], "pas de coordonnées GPS dans l'annonce"
+        cache = self.state.setdefault("journeys", {})
         results = []
-        for d in dests:
+        # D'abord les adresses du filtre ; les adresses « pour info » ne sont calculées
+        # que pour les annonces retenues (économise les appels IDFM)
+        for d in [d for d in dests if not d["info_only"]]:
             r = transit.journey(listing["lat"], listing["lng"], d["lat"], d["lon"],
-                                d["arrival_time"], d["max_minutes"], cache=self.state.setdefault("journeys", {}))
+                                d["arrival_time"], d["max_minutes"], cache=cache)
             results.append({"name": d["name"], "max": d["max_minutes"], **r})
             if not r["ok"]:
                 return "rejected", results, f"{d['name']} : {r['reason']}"
+        for d in [d for d in dests if d["info_only"]]:
+            r = transit.journey(listing["lat"], listing["lng"], d["lat"], d["lon"],
+                                d["arrival_time"], 10 ** 6, cache=cache)
+            results.append({"name": d["name"], "info_only": True, **r, "ok": True})
         return "match", results, ""
 
     def scan(self):

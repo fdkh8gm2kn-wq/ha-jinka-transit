@@ -10,6 +10,7 @@ from http_util import HttpError, get_json
 
 PRIM = "https://prim.iledefrance-mobilites.fr/marketplace/v2/navitia"
 BAN = "https://data.geopf.fr/geocodage/search"
+BAN_FALLBACK = "https://api-adresse.data.gouv.fr/search/"
 
 # Modes autorisables -> "physical modes" Navitia d'IDFM
 MODE_MAP = {
@@ -79,7 +80,14 @@ class Transit:
         looks_like_stop = re.match(r"^\s*(gare|station|métro|metro|rer)\b", address, re.I)
         ban = None
         if not looks_like_stop:
-            data = get_json(BAN, params={"q": address, "limit": 1}) or {}
+            data = {}
+            for url in (BAN, BAN, BAN_FALLBACK):  # le service IGN répond parfois en 504
+                try:
+                    data = get_json(url, params={"q": address, "limit": 1}) or {}
+                    break
+                except (HttpError, OSError) as e:
+                    log.warning("Géocodage de %r : %s, nouvel essai", address, e)
+                    time.sleep(2)
             feats = data.get("features") or []
             if feats:
                 f = feats[0]
