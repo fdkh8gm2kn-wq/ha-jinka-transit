@@ -618,3 +618,12 @@ try:
 except Exception as e:  # le scan complet dépend des faux serveurs des tests précédents
     print("Scan sous quota : non testé ici (", type(e).__name__, e, ")")
 app.evaluate = _eval
+# Filtre « en attente » : envoi en attente + calcul reporté (quota)
+app.state["listings"]["p10"]["status"] = "pending"
+app.state["listings"]["p11"]["status"] = "match"
+_w = _web.render(app, "wait")
+import re as _re
+assert "calcul en attente" in _w, _re.findall(r"Afficher :.*?</div>", _w)
+_n = sum(1 for v in app.state["listings"].values() if v["status"] in ("match", "pending"))
+assert f"en attente ({_n})" in _w and f"({_n} annonces)" in _w, (_n, _re.findall(r"page \d+ / \d+ \(\d+ annonces\)", _w))
+print("Filtre en attente ✔")

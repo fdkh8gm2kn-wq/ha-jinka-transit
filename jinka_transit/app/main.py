@@ -261,6 +261,11 @@ class App:
                 # pas d'email : les annonces en attente seront calculées dès que le quota est renouvelé
                 stats["reportées"] = stats.get("reportées", 0) + 1
                 stats["quota IDFM"] = str(e).split("(429), ")[-1]
+                # gardée « en attente » (crit vide : recalculée au prochain scan possible)
+                known[l["id"]] = {"status": "pending", "crit": None, "listing": l, "results": [],
+                                  "reason": f"calcul du trajet en attente : quota IDFM atteint, {stats['quota IDFM']}",
+                                  "ts": time.time(), "first_seen": first_seen,
+                                  **({"notified_at": prev["notified_at"]} if prev and prev.get("notified_at") else {})}
                 continue  # sans appel réseau : on continue pour les annonces déjà en cache
             except TransitError as e:
                 log.error("Calcul d'itinéraire impossible (%s) : on réessaiera au prochain scan.", e)

@@ -11,8 +11,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from fmt import steps_of, title_of
 
-STATUS_LABEL = {"duplicate": "↔️ doublon", "notified": "✅ envoyée", "match": "⏳ OK, en attente", "silent": "✅ OK (1er scan, non envoyée)",
-                "rejected": "❌ refusée"}
+STATUS_LABEL = {"duplicate": "↔️ doublon", "notified": "✅ envoyée", "match": "⏳ OK, envoi en attente",
+                "silent": "✅ OK (1er scan, non envoyée)", "rejected": "❌ refusée",
+                "pending": "⏳ calcul en attente"}
 
 PAGE = Template("""<!doctype html><html lang="fr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Jinka Transit</title>
@@ -64,6 +65,7 @@ def short_counted(r):
 
 FILTERS = {  # clé d'URL : (libellé, statuts affichés)
     "ok": ("OK", lambda s: s in ("match", "notified", "silent")),
+    "wait": ("en attente", lambda s: s in ("match", "pending")),
     "dup": ("doublons", lambda s: s == "duplicate"),
     "ko": ("refusées", lambda s: s == "rejected"),
     "all": ("toutes", lambda s: True),
@@ -100,7 +102,7 @@ def render(app, flt=DEFAULT_FILTER, page=1):
                f"{esc(chr(10).join(x.strip().replace('*', '') for x in steps_of(r)))}</div></details>"
                if r.get("steps") else "")
             for r in v.get("results", [])) or f"<span class='ko'>{esc(v.get('reason', ''))}</span>"
-        cls = "ko" if v["status"] == "rejected" else "muted" if v["status"] == "duplicate" else "ok"
+        cls = "ko" if v["status"] == "rejected" else "muted" if v["status"] in ("duplicate", "pending") else "ok"
         rows.append(
             f"<tr><td><a href='{esc(l['link'])}' target='_blank' rel='noopener'>{esc(title_of(l))}</a>"
             f"<div class='muted'>{esc(l.get('source') or '')} · {esc(l.get('alert_name') or '')}</div></td>"
