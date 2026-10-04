@@ -12,6 +12,7 @@ from datetime import datetime
 from fmt import body_of, html_of, short_of, title_of
 from jinka import Jinka, JinkaAuthError
 from notify import Notifier
+from http_util import HttpError
 from transit import CACHE_TTL, Transit, TransitError
 import web
 
@@ -169,15 +170,34 @@ class App:
                 self.save_state()
             raise
 
-        stats = {"annonces": len(listings), "évaluées": 0, "ok": 0, "refusées": 0}
+        if o.get("bienici", True):
+            import bienici
+            try:
+                zones = bienici.zones_for(o["bienici_communes"], self.state.setdefault("geocode", {})) \
+                    if o.get("bienici_communes") else [z for v in bienici.default_zones().values() for z in v]
+                bi = bienici.listings(zones, int(o.get("max_rent") or 0), int(o.get("min_area") or 0),
+                                      furnished=o.get("furnished_only", True))
+                log.info("Bien'ici : %d annonces.", len(bi))
+                listings += bi
+            except (HttpError, OSError, ValueError) as e:
+                log.warning("Bien'ici indisponible (%s) : on continue avec Jinka seul.", e)
+
+        stats = {"annonces": len(listings), "évaluées": 0, "ok": 0, "refusées": 0, "doublons": 0}
         known = self.state["listings"]
         for l in listings:
             prev = known.get(l["id"])
-            if prev and prev["status"] in ("notified", "silent"):
+            if prev and prev["status"] in ("notified", "silent", "duplicate"):
                 continue
             if prev and prev["status"] in ("rejected", "match") and prev.get("crit") == crit:
                 continue
             if l["expired"] or l["deleted"]:
+                continue
+            twin = self.find_twin(l)
+            if twin:
+                known[l["id"]] = {"status": "duplicate", "crit": crit, "listing": l, "results": [],
+                                  "reason": f"doublon de {twin['listing'].get('source') or twin['listing']['link']}",
+                                  "ts": time.time()}
+                stats["doublons"] += 1
                 continue
             try:
                 status, results, reason = self.evaluate(l, dests, transit)
@@ -232,6 +252,18 @@ class App:
                     log.exception("Scan échoué : %s", e)
                 self.last_scan = {"at": started.isoformat(timespec="seconds"), "error": str(e),
                                   "status": "erreur"}
+
+    def find_twin(self, listing):
+        """Même logement déjà vu sur une autre source (Jinka ↔ Bien'ici) ?"""
+        import bienici
+        src = listing.get("alert_id") == "bienici"
+        for v in self.state["listings"].values():
+            other = v["listing"]
+            if other["id"] == listing["id"] or (other.get("alert_id") == "bienici") == src:
+                continue
+            if v["status"] in ("notified", "match", "silent", "rejected") and bienici.same_flat(listing, other):
+                return v
+        return None
 
     def make_notifier(self):
         o = self.opts

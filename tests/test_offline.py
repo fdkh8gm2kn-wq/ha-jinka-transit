@@ -28,7 +28,7 @@ OPTIONS = {
     "allowed_modes": ["metro", "rer", "tram"], "max_walk_minutes": 15,
     "whatsapp_phone": "+33600000000", "whatsapp_callmebot_apikey": "123", "ha_notify_service": "",
     "scan_interval_minutes": 15, "max_pages_per_alert": 3, "max_notifications_per_run": 10,
-    "notify_existing_on_first_run": True,
+    "notify_existing_on_first_run": True, "bienici": False,
 }
 json.dump(OPTIONS, open(os.environ["OPTIONS_PATH"], "w"))
 
@@ -385,4 +385,34 @@ assert r == (48.9, 2.25, None), r
 r = locate.locate({"uuid": "u-texte", "postal_code": "95210", "city": "Saint-Gratien"}, tl, {})
 assert r is None or "Garenne" in r[2]  # station trop loin de la commune -> rejetée si > 6 km
 print("annonces sans GPS : station Jinka / texte ✔")
+# Bien'ici : lecture + doublon avec une annonce Jinka déjà vue
+import bienici  # noqa: E402
+bi_ads = [
+    {"id": "bi-1", "price": 1505, "surfaceArea": 60.5, "roomsQuantity": 3, "city": "Vincennes", "postalCode": "94300",
+     "blurInfo": {"type": "disk", "radius": 50, "position": {"lat": 1.0, "lon": 1.0}}, "accountDisplayName": "Agence X",
+     "floor": 0, "hasDoorCode": True, "photos": [{"url": "https://img/x.jpg"}], "publicationDate": "2026-10-04"},
+    {"id": "bi-2", "price": 800, "surfaceArea": 22, "roomsQuantity": 1, "city": "Paris 15e", "postalCode": "75015",
+     "blurInfo": {"type": "disk", "radius": 1000, "position": {"lat": 1.0, "lon": 1.0}},
+     "description": "Studio meublé, métro Nation", "floor": 3, "hasCaretaker": True},
+]
+n = bienici.normalize(bi_ads[0])
+assert n["link"] == "https://www.bienici.com/annonce/bi-1" and n["lat"] == 1.0 and n["safety"] == ["digicode"]
+assert bienici.normalize(bi_ads[1])["lat"] is None  # position floutée à 1 km : ignorée
+assert bienici.same_flat(n, L["ad1"]["listing"])  # même logement que l'annonce Jinka ad1 (Vincennes 1500 € 60 m²)
+assert fmt.building_info(n) == "rez-de-chaussée · digicode"
+_prev2 = urllib.request.urlopen
+def urlopen_bi(req, timeout=None):
+    if "bienici.com/realEstateAds.json" in req.full_url:
+        f = json.loads(parse_qs(urlparse(req.full_url).query)["filters"][0])
+        assert f["maxPrice"] == 850 and f["minArea"] == 20 and f["isFurnished"] is True
+        return FakeResp({"total": 2, "realEstateAds": bi_ads})
+    return _prev2(req, timeout)
+urllib.request.urlopen = urlopen_bi
+bienici.time.sleep = lambda s: None
+got = bienici.listings(["-1"], 850, 20)
+assert [g["id"] for g in got] == ["bienici:bi-1", "bienici:bi-2"]
+twin = app.find_twin(got[0])
+assert twin and twin["listing"]["id"] == "ad1"
+assert app.find_twin(got[1]) is None
+print("Bien'ici + doublons ✔")
 print("\nTous les tests passent ✔")

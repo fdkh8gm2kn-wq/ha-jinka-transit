@@ -74,6 +74,13 @@ depuis le centre de chaque commune. Carte + liste à recopier dans le secteur de
   vers le numéro de la ligne Free qui a activé l'option « Notifications par SMS ».
 - WhatsApp (CallMeBot) et service notify de Home Assistant restent possibles. Tous les canaux configurés sont utilisés.
 
+## Bien'ici
+
+En plus de Jinka, l'add-on interroge Bien'ici (API JSON publique du site) avec les mêmes critères
+(meublé, loyer max, surface min) sur les 112 communes des alertes Jinka. Un logement déjà vu sur
+l'autre source (même code postal, loyer à 15 € près, surface à 1,5 m² près) est marqué « doublon » et
+n'est pas renvoyé. Les messages Bien'ici indiquent l'étage et digicode / gardien / interphone.
+
 ## Annonces sans GPS
 
 Si Jinka ne donne pas de coordonnées, l'add-on lit la fiche publique de l'annonce : coordonnées, puis

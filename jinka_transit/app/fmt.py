@@ -70,6 +70,9 @@ def body_of(v):
     if l.get("approx"):
         lines.append("")
         lines.append(f"⚠️ Pas d'adresse GPS : position estimée {l['approx']}")
+    extra = building_info(l)
+    if extra:
+        lines.append(f"🏢 {extra}")
     lines.append("")
     lines.append(f"🔗 {l['link']}")
     if l.get("lat") is not None:
@@ -111,4 +114,15 @@ def html_of(v):
 {''.join(blocks)}
 <p style="margin:18px 0"><a href="{e(l['link'])}" style="background:#0b63ce;color:#fff;padding:10px 16px;
 border-radius:8px;text-decoration:none">Voir l'annonce</a>{maps}</p>
+{f"<p>🏢 {e(building_info(l))}</p>" if building_info(l) else ""}
 <p style="color:#888;font-size:12px">{e(l.get('source') or '')} · alerte « {e(l.get('alert_name') or '')} » · Jinka Transit</p></div>"""
+
+
+def building_info(l):
+    """Étage et sécurité de l'immeuble, quand l'annonce les donne (Bien'ici)."""
+    parts = []
+    if l.get("floor") is not None:
+        parts.append("rez-de-chaussée" if l["floor"] == 0 else "1er étage" if l["floor"] == 1 else f"{l['floor']}e étage")
+    if l.get("safety"):
+        parts.append(", ".join(l["safety"]))
+    return " · ".join(parts)

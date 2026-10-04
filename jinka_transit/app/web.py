@@ -10,7 +10,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from fmt import steps_of, title_of
 
-STATUS_LABEL = {"notified": "✅ envoyée", "match": "⏳ OK, en attente", "silent": "✅ OK (1er scan, non envoyée)",
+STATUS_LABEL = {"duplicate": "↔️ doublon", "notified": "✅ envoyée", "match": "⏳ OK, en attente", "silent": "✅ OK (1er scan, non envoyée)",
                 "rejected": "❌ refusée"}
 
 PAGE = Template("""<!doctype html><html lang="fr"><head><meta charset="utf-8">

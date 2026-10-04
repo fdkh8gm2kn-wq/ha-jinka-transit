@@ -36,6 +36,14 @@ configuration:
   min_area:
     name: Surface minimum (m²)
     description: 0 = pas de minimum. Les annonces sans surface indiquée sont gardées.
+  furnished_only:
+    name: Meublé uniquement (Bien'ici)
+  bienici:
+    name: Chercher aussi sur Bien'ici
+    description: Mêmes critères que les alertes Jinka ; les doublons Jinka/Bien'ici sont écartés.
+  bienici_communes:
+    name: Communes Bien'ici (optionnel)
+    description: Vide = les 112 communes des 3 alertes Jinka (≤ 75 min).
   max_rent:
     name: Loyer max (€, charges comprises selon l'annonce)
     description: 0 = pas de limite. Vérifié avant le calcul des trajets.
