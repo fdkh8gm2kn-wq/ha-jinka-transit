@@ -37,27 +37,6 @@ Si un jour la connexion expire, l'add-on te prévient : refais la même chose.
 « Jeton Jinka refusé ou expiré », refais cette manip.) Si ton compte a un vrai mot de passe, tu peux mettre
 email + mot de passe à la place.
 
-## 2. Tester en local avec Docker (sur le Mac)
-
-```bash
-cd ~/Documents/CLAUDE/appart
-cp local/options.example.json local/options.json   # puis remplis-le
-docker compose up --build -d
-```
-
-Interface : http://localhost:8099 (bouton « Scanner maintenant »). Logs : `docker compose logs -f`.
-Astuce : pour un premier test sans recevoir 10 WhatsApp, laisse `whatsapp_phone` vide : les résultats
-s'affichent seulement dans l'interface (puis supprime `local/state.json` avant de remettre le numéro).
-
-## 3. Installer sur Home Assistant
-
-1. Installe l'add-on **Samba share** (ou *Studio Code Server*) dans HA.
-2. Copie le dossier `jinka_transit/` dans le partage **`addons`** → `\\homeassistant.local\addons\jinka_transit`.
-3. *Paramètres → Modules complémentaires → Boutique* → menu ⋮ → **Rechercher des mises à jour**.
-   L'add-on apparaît dans **Add-ons locaux** → *Installer* (le Supervisor construit l'image Docker lui-même).
-4. Onglet **Configuration** : remplis jetons, adresses, durées → *Enregistrer* → *Démarrer*.
-5. Active « Afficher dans la barre latérale » : l'interface « Appart métro/RER » apparaît dans HA.
-
 Les données (annonces déjà vues) sont dans `/data` de l'add-on, incluses dans les sauvegardes HA.
 
 ## Zones compatibles (recherche élargie)
@@ -72,7 +51,7 @@ depuis le centre de chaque commune. Carte + liste à recopier dans le secteur de
   depuis la boîte Gmail dédiée avec la même clé d'application Google.
 - **SMS Free Mobile** (`free_sms_user` + `free_sms_key`) : version courte (prix, ville, temps, lien), gratuite,
   vers le numéro de la ligne Free qui a activé l'option « Notifications par SMS ».
-- WhatsApp (CallMeBot) et service notify de Home Assistant restent possibles. Tous les canaux configurés sont utilisés.
+- WhatsApp (CallMeBot) reste possible. Tous les canaux configurés sont utilisés.
 
 ## Bien'ici
 
