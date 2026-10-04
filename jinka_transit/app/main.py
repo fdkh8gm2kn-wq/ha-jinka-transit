@@ -118,7 +118,8 @@ class App:
         return out
 
     def evaluate(self, listing, dests, transit):
-        if listing.get("coliving"):
+        import bienici
+        if listing.get("coliving") or bienici.is_coliving({"description": listing.get("description")}):
             return "rejected", [], "chambre en colocation"
         max_rent = int(self.opts.get("max_rent") or 0)
         if max_rent and listing.get("rent") and listing["rent"] > max_rent:
@@ -167,6 +168,7 @@ class App:
         dests = self.resolve_destinations(transit)
         crit = self.criteria_hash()
 
+        self.recheck_coliving()
         done = {k for k, v in self.state["listings"].items()
                 if v["status"] in ("notified", "silent") or v.get("crit") == crit}
         done |= set(self.state.get("forgotten", {}))
@@ -387,6 +389,20 @@ class App:
                 self.save_state()
         except Exception:  # noqa: BLE001
             log.exception("Impossible d'envoyer l'email de rétablissement")
+
+    def recheck_coliving(self):
+        """Annonces déjà retenues qui s'avèrent être des chambres en colocation (filtre ajouté ou amélioré
+        après coup) : passées en « refusées »."""
+        import bienici
+        n = 0
+        for v in self.state["listings"].values():
+            if v["status"] in ("match", "notified", "silent") and bienici.is_coliving(
+                    {"description": v["listing"].get("description")}):
+                v["status"], v["reason"], v["results"] = "rejected", "chambre en colocation (détectée après coup)", []
+                n += 1
+        if n:
+            log.info("%d annonce(s) retenue(s) auparavant écartée(s) : chambre en colocation.", n)
+            self.save_state()
 
     def find_twin(self, listing):
         """Même logement déjà vu sur une autre source (Jinka ↔ Bien'ici) ?"""

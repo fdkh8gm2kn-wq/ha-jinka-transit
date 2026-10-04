@@ -104,15 +104,24 @@ def normalize(ad):
     }
 
 
-COLIVING_RE = re.compile(r"^\s*(chambre|colocation)\b|chambre[^.]{0,40}\b(en|dans une?)\s+coloc|\bcolocation\s+(meubl|neuve|à)",
-                         re.I)
+COLIVING_RE = re.compile(
+    r"^\s*(chambre|colocation|co-?living)\b"
+    r"|chambre[^.]{0,40}\b(en|dans une?)\s+(coloc|co-?living)"
+    r"|\bcolocation\s+(meubl|neuve|à|de \d|baux|en bail)"
+    r"|\bbaux individuels\b|\bbail individuel\b|\bco-?living\b|\bcolocataires?\b"
+    r"|\b(\d+|une)\s+chambres?\s+(est\s+|sont\s+)?(disponibles?|libres?|à louer)\b",
+    re.I | re.M)
+# « pas de colocation », « colocation non acceptée »… : un logement entier, à ne pas exclure
+NOT_COLIVING_RE = re.compile(r"\b(pas de|sans|hors|non)\s+colocation\b"
+                             r"|\bcolocation\s+(non|pas|interdite|refusée|exclue|impossible)\b[^.]*", re.I)
 
 
 def is_coliving(ad):
-    """Chambre en colocation (exclue, comme sur les alertes Jinka) ?"""
+    """Chambre en colocation / coliving (exclue, comme sur les alertes Jinka) ?"""
     if ad.get("flatSharing"):
         return True
-    return bool(COLIVING_RE.search(f"{ad.get('title') or ''}\n{(ad.get('description') or '')[:300]}"))
+    text = f"{ad.get('title') or ''}\n{(ad.get('description') or '')[:600]}"
+    return bool(COLIVING_RE.search(NOT_COLIVING_RE.sub(" ", text)))
 
 
 def same_flat(a, b):

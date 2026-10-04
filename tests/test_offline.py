@@ -507,3 +507,15 @@ assert "old" not in app.state["listings"] and "old" in app.state["forgotten"]
 assert "tres-vieux" not in app.state["forgotten"] and len(app.state["listings"]) == 120
 print("Filtres OK (défaut) / doublons / refusées ✔")
 print("Pagination + purge 30 jours ✔")
+# Colocations détectées dans le texte, y compris pour les annonces déjà retenues
+assert bienici.is_coliving({"description": "COLOCATION BAUX INDIVIDUELS 1 Chambre disponible"})
+assert bienici.is_coliving({"description": "Une chambre est disponible dans une colocation de 68 m²"})
+assert bienici.is_coliving({"description": "maison de 130 m2 en coliving rénovée"})
+assert not bienici.is_coliving({"description": "T2 meublé de 30 m², colocation non acceptée, métro ligne 7"})
+assert not bienici.is_coliving({"description": "Appartement F2, une chambre séparée, disponible de suite"})
+app.state["listings"]["p7"]["status"] = "notified"
+app.state["listings"]["p7"]["listing"] = {**app.state["listings"]["p7"]["listing"], "description": "COLOCATION BAUX INDIVIDUELS 1 Chambre disponible"}
+app.recheck_coliving()
+assert app.state["listings"]["p7"]["status"] == "rejected" and app.state["listings"]["p6"]["status"] == "notified"
+assert app.evaluate({**L["ad1"]["listing"], "description": "Une chambre est disponible dans une colocation"}, [], None)[2] == "chambre en colocation"
+print("Colocations (texte + rattrapage) ✔")
