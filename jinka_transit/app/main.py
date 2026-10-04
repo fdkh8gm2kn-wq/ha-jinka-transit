@@ -21,6 +21,8 @@ OPTIONS_PATH = os.environ.get("OPTIONS_PATH", "/data/options.json")
 STATE_PATH = os.environ.get("STATE_PATH", "/data/state.json")
 MAX_DESTINATIONS = 5
 MAX_STATE_ENTRIES = 3000
+LISTING_TTL = 30 * 86400     # annonce retirée de la liste 30 jours après sa détection
+FORGOTTEN_TTL = 180 * 86400  # … mais son identifiant reste mémorisé 6 mois pour ne pas la renvoyer
 ERROR_EMAIL_EVERY = 6 * 3600  # même type d'erreur : au plus un email toutes les 6 h
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
@@ -76,7 +78,18 @@ class App:
         except (OSError, ValueError):
             return {"listings": {}, "geocode": {}, "first_run_done": False, "auth_alert_sent": False}
 
+    def purge_old_listings(self, now=None):
+        """Supprime les annonces détectées il y a plus de 30 jours (seul l'identifiant est gardé)."""
+        now = now or time.time()
+        forgotten = self.state.setdefault("forgotten", {})
+        for k, v in list(self.state["listings"].items()):
+            if now - v.get("first_seen", v.get("ts", now)) > LISTING_TTL:
+                forgotten[k] = now
+                del self.state["listings"][k]
+        self.state["forgotten"] = {k: t for k, t in forgotten.items() if now - t < FORGOTTEN_TTL}
+
     def save_state(self):
+        self.purge_old_listings()
         items = self.state["listings"]
         if len(items) > MAX_STATE_ENTRIES:
             keep = sorted(items.items(), key=lambda kv: kv[1].get("ts", 0), reverse=True)
@@ -156,6 +169,7 @@ class App:
 
         done = {k for k, v in self.state["listings"].items()
                 if v["status"] in ("notified", "silent") or v.get("crit") == crit}
+        done |= set(self.state.get("forgotten", {}))
         try:
             try:
                 listings = jinka.listings(o.get("jinka_alerts"), int(o.get("max_pages_per_alert", 3)), known=done)
@@ -189,8 +203,12 @@ class App:
 
         stats = {"annonces": len(listings), "évaluées": 0, "ok": 0, "refusées": 0, "doublons": 0}
         known = self.state["listings"]
+        forgotten = self.state.get("forgotten", {})
         for l in listings:
+            if l["id"] in forgotten:  # vue il y a plus de 30 jours : on ne la retraite pas
+                continue
             prev = known.get(l["id"])
+            first_seen = (prev or {}).get("first_seen") or (prev or {}).get("ts") or time.time()
             if prev and prev["status"] in ("notified", "silent", "duplicate"):
                 continue
             if prev and prev["status"] in ("rejected", "match") and prev.get("crit") == crit:
@@ -201,7 +219,7 @@ class App:
             if twin:
                 known[l["id"]] = {"status": "duplicate", "crit": crit, "listing": l, "results": [],
                                   "reason": f"doublon de {twin['listing'].get('source') or twin['listing']['link']}",
-                                  "ts": time.time()}
+                                  "ts": time.time(), "first_seen": first_seen}
                 stats["doublons"] += 1
                 self.count_daily(l, "doublons")
                 continue
@@ -217,7 +235,7 @@ class App:
             if status == "match":
                 self.count_daily(l, "retenues")
             known[l["id"]] = {"status": status, "crit": crit, "listing": l, "results": results,
-                              "reason": reason, "ts": time.time()}
+                              "reason": reason, "ts": time.time(), "first_seen": first_seen}
             log.info("%s %s — %s", "✅" if status == "match" else "❌", title_of(l),
                      reason or " / ".join(f"{r['name']} {r['minutes']} min" for r in results))
 

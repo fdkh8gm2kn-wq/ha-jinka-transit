@@ -42,9 +42,9 @@ ${flash}<div class="card"><b>Connexion Jinka :</b> ${jinka_status}
 <form method="post" action="scan" style="display:inline;margin-left:12px"><button>Scanner maintenant</button></form>
 <form method="post" action="notify/test" style="display:inline;margin-left:8px"><button>Envoyer une notification de test</button></form></div>
 <div class="card"><b>Adresses</b><table><tr><th>Nom</th><th>Adresse saisie</th><th>Localisée à</th><th>Max</th><th>Arrivée</th></tr>${dests}</table>
-<div class="muted">Loyer max : ${rent} · surface min : ${area} · Modes autorisés : ${modes} · marche max logement → station : ${home_walk} min · marche max côté destination : ${walk} min</div></div>
-<div class="card"><div class="filters">Afficher : ${filters}</div><div class="wrap"><table>
-<tr><th>Annonce</th><th>Statut</th><th>Trajets</th><th>Vue le</th></tr>${rows}</table></div></div>
+<div class="muted">Loyer max : ${rent} · surface min : ${area} · Modes autorisés : ${modes} · marche max logement → station : ${home_walk} min · trajet tout à pied accepté jusqu'à ${walk} min</div></div>
+<div class="card"><div class="filters">Afficher : ${filters} <span class="muted">· les annonces sont retirées 30 jours après leur détection</span></div>${pager}<div class="wrap"><table>
+<tr><th>Annonce</th><th>Statut</th><th>Trajets</th><th>Vue le</th></tr>${rows}</table></div>${pager}</div>
 </main></body></html>""")
 
 
@@ -53,7 +53,10 @@ def safe_json(obj):
     return json.dumps(obj).replace("<", "\\u003c")
 
 
-def render(app, flt):
+PAGE_SIZE = 50
+
+
+def render(app, flt, page=1):
     esc = html.escape
     st = app.state
     geocache = st.get("geocode", {})
@@ -68,8 +71,12 @@ def render(app, flt):
         items = [v for v in items if v["status"] != "rejected"]
     elif flt == "ko":
         items = [v for v in items if v["status"] == "rejected"]
+    pages = max(1, -(-len(items) // PAGE_SIZE))
+    page = min(max(1, page), pages)
+    total = len(items)
+    items = items[(page - 1) * PAGE_SIZE:page * PAGE_SIZE]
     rows = []
-    for v in items[:300]:
+    for v in items:
         l = v["listing"]
         trips = "<br>".join(
             f"<span class='{'muted' if r.get('info_only') else 'ok' if r['ok'] else 'ko'}'>"
@@ -89,6 +96,10 @@ def render(app, flt):
     filters = " ".join(
         f"<a href='?f={k}'{' style=font-weight:700' if flt == k else ''}>{label}</a>"
         for k, label in (("all", "toutes"), ("ok", "OK"), ("ko", "refusées")))
+    nav = [f"<a href='?f={esc(flt)}&p={page - 1}'>« précédentes</a>" if page > 1 else "",
+           f"page {page} / {pages} ({total} annonces)",
+           f"<a href='?f={esc(flt)}&p={page + 1}'>suivantes »</a>" if page < pages else ""]
+    pager = f"<div class='filters'>{' · '.join(x for x in nav if x)}</div>"
     last = app.last_scan
     auth = app.state.get("jinka_auth") or {}
     if app.opts.get("jinka_token"):
@@ -121,6 +132,7 @@ def render(app, flt):
         home_walk=app.opts.get("max_walk_home_minutes", 5),
         rent=f"{app.opts['max_rent']} €" if app.opts.get("max_rent") else "aucun",
         area=f"{app.opts['min_area']} m²" if app.opts.get("min_area") else "aucune",
+        pager=pager,
         rows="".join(rows) or "<tr><td colspan=4 class='muted'>Rien pour l'instant</td></tr>")
 
 
@@ -157,8 +169,10 @@ def start(app, port=8099):
                                                   ensure_ascii=False), "application/json")
             if path.rstrip("/").endswith("explore"):
                 return self._send(200, render_explore(app))
-            flt = dict(p.split("=", 1) for p in query.split("&") if "=" in p).get("f", "all")
-            self._send(200, render(app, flt))
+            q = {k: v[0] for k, v in parse_qs(query).items()}
+            flt = q.get("f", "all") if q.get("f") in ("all", "ok", "ko") else "all"
+            page = int(q["p"]) if q.get("p", "").isdigit() else 1
+            self._send(200, render(app, flt, page))
 
         def do_POST(self):
             if not self._allowed():

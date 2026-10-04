@@ -482,3 +482,23 @@ assert "Jinka : 2 annonces testées, 1 retenues" in body and "Bien'ici : 1 annon
 assert not app.daily_report_due(_dt(2026, 10, 5, 9, 0)) and app.daily_report_due(_dt(2026, 10, 6, 8, 0))
 assert app.state["daily"]["sites"] == {}
 print("Rapport quotidien ✔")
+# Pagination (50 par page) et suppression après 30 jours
+import time
+import web as _web
+_now = time.time()
+app.state["listings"] = {f"p{i}": {"status": "rejected", "crit": "x", "listing": {**L["ad1"]["listing"], "id": f"p{i}"},
+                                   "results": [], "reason": "test", "ts": _now - i, "first_seen": _now - i}
+                         for i in range(120)}
+app.state["listings"]["old"] = {**app.state["listings"]["p0"], "first_seen": _now - 31 * 86400}
+app.state["forgotten"] = {"tres-vieux": _now - 200 * 86400}
+app.opts["destinations"] = [{"name": "A", "address": "x", "max_minutes": 45, "arrival_time": "09:00"}]
+p1 = _web.render(app, "all", 1)
+p3 = _web.render(app, "all", 3)
+assert "page 1 / 3 (121 annonces)" in p1 and "suivantes »" in p1 and "« précédentes" not in p1
+assert "page 3 / 3" in p3 and p3.count("<tr><td><a href=") == 21
+assert p1.count("<tr><td><a href=") == 50
+assert "page 3 / 3" in _web.render(app, "all", 99)
+app.purge_old_listings(_now)
+assert "old" not in app.state["listings"] and "old" in app.state["forgotten"]
+assert "tres-vieux" not in app.state["forgotten"] and len(app.state["listings"]) == 120
+print("Pagination + purge 30 jours ✔")
