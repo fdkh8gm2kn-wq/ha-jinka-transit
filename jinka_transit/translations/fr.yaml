@@ -50,6 +50,14 @@ configuration:
   max_walk_home_minutes:
     name: Marche max logement → station (min)
     description: Une annonce n'est retenue que si une station de métro/RER/tram est à moins de ce temps à pied du logement.
+  max_transfers:
+    name: Correspondances max
+    description: Au-delà, le trajet est refusé (2 = 3 correspondances ou plus refusées).
+  transfer_penalty_minutes:
+    name: Pénalité par correspondance (min)
+    description: >-
+      Ajoutée au temps de trajet pour le filtre (risque de correspondance ratée). Ex. 3 : un trajet de 40 min
+      avec 2 correspondances compte pour 46 min. Le temps affiché reste le temps réel.
   max_walk_minutes:
     name: Trajet tout à pied accepté jusqu'à (min)
     description: >-

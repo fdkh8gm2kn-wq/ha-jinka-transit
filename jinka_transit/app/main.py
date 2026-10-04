@@ -67,7 +67,8 @@ class App:
         o = self.opts
         key = json.dumps([o["destinations"], sorted(o.get("allowed_modes") or []),
                           o.get("max_walk_minutes"), o.get("max_rent", 0), o.get("max_walk_home_minutes", 5),
-                          "localisation-v2", "marche-destination-30", o.get("min_area", 0)],
+                          "localisation-v2", "marche-destination-30", o.get("min_area", 0),
+                          o.get("transfer_penalty_minutes", 3), o.get("max_transfers", 2)],
                          sort_keys=True)
         return hashlib.sha1(key.encode()).hexdigest()[:12]
 
@@ -116,6 +117,27 @@ class App:
                          d["name"], addr, g["label"], g["lat"], g["lon"])
             out.append({**d, **cache[addr]})
         return out
+
+    def make_transit(self):
+        o = self.opts
+        return Transit(o["prim_api_key"], o.get("allowed_modes"), o.get("max_walk_minutes", 15),
+                       transfer_penalty=o.get("transfer_penalty_minutes", 3), max_transfers=o.get("max_transfers", 2))
+
+    def transfer_reject(self, results):
+        """Vérifie des trajets déjà calculés avec la règle des correspondances. Renvoie la raison ou None."""
+        o = self.opts
+        pen, mx = int(o.get("transfer_penalty_minutes", 3) or 0), o.get("max_transfers", 2)
+        maxes = {d["name"]: int(d.get("max_minutes") or 45) for d in o["destinations"] if not d.get("info_only")}
+        for r in results or []:
+            if r.get("info_only") or r.get("minutes") is None or r["name"] not in maxes:
+                continue
+            n = r.get("transfers", 0)
+            if mx is not None and n > int(mx):
+                return f"{r['name']} : {n} correspondances (max {mx})"
+            if r["minutes"] + pen * n > maxes[r["name"]]:
+                return (f"{r['name']} : {r['minutes']} min + {pen * n} min de correspondances "
+                        f"> {maxes[r['name']]} min")
+        return None
 
     def basic_reject(self, listing):
         """Critères simples (sans calcul de trajet) : colocation, loyer, surface. Renvoie la raison ou None."""
@@ -170,7 +192,7 @@ class App:
         token = o.get("jinka_token") or (self.state.get("jinka_auth") or {}).get("token")
         password = "" if o.get("mail_password") else o.get("jinka_password")
         jinka = Jinka(o.get("jinka_email"), password, token)
-        transit = Transit(o["prim_api_key"], o.get("allowed_modes"), o.get("max_walk_minutes", 15))
+        transit = self.make_transit()
         notifier = self.make_notifier()
         dests = self.resolve_destinations(transit)
         crit = self.criteria_hash()
@@ -238,13 +260,16 @@ class App:
                 log.error("Calcul d'itinéraire impossible (%s) : on réessaiera au prochain scan.", e)
                 self.report_error("itinéraires", f"Calcul d'itinéraire impossible (API IDFM) : {e}")
                 break
+            if status == "match" and prev and prev.get("notified_at"):
+                status = "notified"  # déjà envoyée auparavant : pas de second envoi
             stats["évaluées"] += 1
-            stats["ok" if status == "match" else "refusées"] += 1
+            stats["ok" if status in ("match", "notified") else "refusées"] += 1
             self.count_daily(l, "testées")
             if status == "match":
                 self.count_daily(l, "retenues")
             known[l["id"]] = {"status": status, "crit": crit, "listing": l, "results": results,
-                              "reason": reason, "ts": time.time(), "first_seen": first_seen}
+                              "reason": reason, "ts": time.time(), "first_seen": first_seen,
+                              **({"notified_at": prev["notified_at"]} if prev and prev.get("notified_at") else {})}
             log.info("%s %s — %s", "✅" if status == "match" else "❌", title_of(l),
                      reason or " / ".join(f"{r['name']} {r['minutes']} min" for r in results))
 
@@ -408,6 +433,13 @@ class App:
                     v["status"], v["reason"], v["results"] = "rejected", f"{reason} (revérifiée)", []
                     v["crit"] = self.criteria_hash()
                     n += 1
+                    continue
+                reason = self.transfer_reject(v.get("results"))
+                if reason:
+                    # le trajet retenu ne passe plus ; s'il réapparaît, il sera recalculé (un autre trajet
+                    # avec moins de correspondances peut convenir) sans être renvoyé une 2e fois
+                    v["status"], v["reason"], v["crit"] = "rejected", f"{reason} (revérifiée)", None
+                    n += 1
         if n:
             log.info("%d annonce(s) retenue(s) auparavant écartée(s) après revérification des critères.", n)
             self.save_state()
@@ -486,8 +518,7 @@ class App:
     def _explore(self, radius_km, max_minutes=None):
         import explore
         try:
-            transit = Transit(self.opts["prim_api_key"], self.opts.get("allowed_modes"),
-                              self.opts.get("max_walk_minutes", 15))
+            transit = self.make_transit()
             with self.lock:
                 dests = self.resolve_destinations(transit)
             cache = dict(self.state.get("explore_cache", {}))  # copie : le scan peut sauver en parallèle

@@ -53,6 +53,12 @@ def steps_of(r):
     return out
 
 
+def counted_txt(r):
+    """« , compté 47 min avec les correspondances » quand une pénalité s'applique."""
+    c = r.get("counted")
+    return f", compté {c} min avec les correspondances" if c and c != r.get("minutes") else ""
+
+
 def body_of(v):
     l = v["listing"]
     lines = []
@@ -64,7 +70,7 @@ def body_of(v):
         transfers = r.get("transfers", 0)
         corr = "direct" if not transfers else f"{transfers} correspondance{'s' if transfers > 1 else ''}"
         head = (f"ℹ️ *{r['name']}* (pour info) — {r['minutes']} min porte à porte" if r.get("info_only")
-                else f"📍 *{r['name']}* — {r['minutes']} min porte à porte (max {r.get('max', '?')})")
+                else f"📍 *{r['name']}* — {r['minutes']} min porte à porte{counted_txt(r)} (max {r.get('max', '?')})")
         lines.append(f"{head} · {r.get('walk_minutes', 0)} min à pied · {corr}")
         lines.extend(steps_of(r))
     if l.get("approx"):
@@ -101,7 +107,7 @@ def html_of(v):
             blocks.append(f"<p style='color:#666'>ℹ️ <b>{e(r['name'])}</b> : {e(r.get('reason') or 'pas de trajet')}</p>")
             continue
         head = (f"ℹ️ <b>{e(r['name'])}</b> (pour info) — {r['minutes']} min" if r.get("info_only")
-                else f"📍 <b>{e(r['name'])}</b> — <b>{r['minutes']} min</b> porte à porte (max {r.get('max', '?')})")
+                else f"📍 <b>{e(r['name'])}</b> — <b>{r['minutes']} min</b> porte à porte{counted_txt(r)} (max {r.get('max', '?')})")
         steps = "".join(f"<li>{e(s.strip().replace('*', ''))}</li>" for s in steps_of(r))
         blocks.append(f"<p style='margin:14px 0 4px'>{head}</p><ul style='margin:0;padding-left:18px;color:#333'>{steps}</ul>")
     img = (f"<img src='{e(l['image'])}' alt='' style='width:100%;max-width:560px;border-radius:10px'>"

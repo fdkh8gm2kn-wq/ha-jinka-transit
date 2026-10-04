@@ -528,3 +528,25 @@ assert app.state["listings"]["p7"]["status"] == "rejected" and app.state["listin
 assert app.state["listings"]["p8"]["status"] == "rejected" and "16 m² < 20 m²" in app.state["listings"]["p8"]["reason"]
 assert app.evaluate({**L["ad1"]["listing"], "description": "Une chambre est disponible dans une colocation"}, [], None)[2] == "chambre en colocation"
 print("Colocations + surface (texte + rattrapage des annonces déjà retenues) ✔")
+# Correspondances : 3+ refusées, +3 min par correspondance, choix du trajet le moins pénalisé
+import transit as _tr
+_t = _tr.Transit("k", ["metro", "rer"], 15, transfer_penalty=3, max_transfers=2)
+def _cand(m, n): return {"minutes": m, "transfers": n, "walk_minutes": 5, "summary": " → ".join(["L"] * (n + 1)), "steps": []}
+_key = lambda: f"{1.0:.4f},{1.0:.4f}>{2.0:.5f},{2.0:.5f}@09:00|{','.join(sorted(_t.allowed))}|15|d{_tr.DEST_WALK_MAX}"
+_c = {_key(): {"ts": time.time(), "best": {**_cand(40, 2), "candidates": [_cand(40, 2), _cand(43, 1), _cand(39, 3)]}}}
+r = _t.journey(1.0, 1.0, 2.0, 2.0, "09:00", 45, cache=_c)
+assert r["minutes"] == 43 and r["counted"] == 46 and not r["ok"], r  # 40+6=46, 43+3=46 → égalité, 46 > 45
+r = _t.journey(1.0, 1.0, 2.0, 2.0, "09:00", 46, cache=_c)
+assert r["ok"] and r["counted"] == 46
+_c[_key()]["best"]["candidates"] = [_cand(30, 3)]
+r = _t.journey(1.0, 1.0, 2.0, 2.0, "09:00", 45, cache=_c)
+assert not r["ok"] and r["reason"] == "3 correspondances (max 2)", r
+assert "compté 46 min" in fmt.counted_txt({"minutes": 40, "counted": 46}) and fmt.counted_txt({"minutes": 40, "counted": 40}) == ""
+app.opts.update({"transfer_penalty_minutes": 3, "max_transfers": 2,
+                 "destinations": [{"name": "Travail", "address": "x", "max_minutes": 45, "arrival_time": "09:00"}]})
+app.state["listings"]["p9"]["status"] = "notified"
+app.state["listings"]["p9"]["results"] = [{"name": "Travail", "minutes": 44, "transfers": 2, "summary": "A → B → C"}]
+app.recheck_retained()
+assert app.state["listings"]["p9"]["status"] == "rejected" and "44 min + 6 min" in app.state["listings"]["p9"]["reason"]
+assert app.state["listings"]["p9"]["crit"] is None  # sera recalculée si elle réapparaît
+print("Correspondances (max 2, +3 min chacune) ✔")

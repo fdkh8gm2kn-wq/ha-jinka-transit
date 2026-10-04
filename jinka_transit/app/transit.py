@@ -44,8 +44,10 @@ def next_weekday(hhmm, now=None):
 
 
 class Transit:
-    def __init__(self, api_key, allowed_modes, max_walk_minutes=15):
+    def __init__(self, api_key, allowed_modes, max_walk_minutes=15, transfer_penalty=0, max_transfers=None):
         self.api_key = api_key
+        self.transfer_penalty = int(transfer_penalty or 0)  # minutes ajoutées par correspondance (risque de retard)
+        self.max_transfers = None if max_transfers is None else int(max_transfers)
         self.allowed = set()
         for m in allowed_modes or ["metro", "rer"]:
             self.allowed |= MODE_MAP.get(m, set())
@@ -143,10 +145,30 @@ class Transit:
                         "steps": candidates[0].get("steps", []),
                         "reason": f"station à {closest} min à pied du logement (max {home_walk_max} min)"}
             candidates = near
-        r = {k: v for k, v in candidates[0].items() if k != "candidates"}
-        r["ok"] = r["minutes"] <= max_minutes
-        r["reason"] = "" if r["ok"] else f"{r['minutes']} min > {max_minutes} min"
+        if self.max_transfers is not None:
+            fewer = [c for c in candidates if c.get("transfers", 0) <= self.max_transfers]
+            if not fewer:
+                c0 = candidates[0]
+                return {**{k: v for k, v in c0.items() if k != "candidates"}, "ok": False,
+                        "reason": f"{c0.get('transfers')} correspondances (max {self.max_transfers})"}
+            candidates = fewer
+        # on retient le trajet le plus court une fois les correspondances pénalisées
+        best = min(candidates, key=lambda c: (self.counted(c), c.get("transfers", 0)))
+        r = {k: v for k, v in best.items() if k != "candidates"}
+        r["counted"] = self.counted(r)
+        r["ok"] = r["counted"] <= max_minutes
+        if r["ok"]:
+            r["reason"] = ""
+        elif r["counted"] != r["minutes"]:
+            r["reason"] = (f"{r['minutes']} min + {r['counted'] - r['minutes']} min de correspondances "
+                           f"= {r['counted']} min > {max_minutes} min")
+        else:
+            r["reason"] = f"{r['minutes']} min > {max_minutes} min"
         return r
+
+    def counted(self, c):
+        """Durée retenue pour le filtre : durée réelle + pénalité par correspondance."""
+        return c["minutes"] + self.transfer_penalty * c.get("transfers", 0)
 
     def _fetch_best(self, from_lat, from_lon, to_lat, to_lon, arrival_hhmm):
         params = [

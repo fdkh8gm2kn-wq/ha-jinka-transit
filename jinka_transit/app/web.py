@@ -56,6 +56,12 @@ def safe_json(obj):
 PAGE_SIZE = 50
 
 
+def short_counted(r):
+    """« (compté 46) » quand la pénalité de correspondances s'applique."""
+    c = r.get("counted")
+    return f" (compté {c})" if c and c != r.get("minutes") and not r.get("info_only") else ""
+
+
 FILTERS = {  # clé d'URL : (libellé, statuts affichés)
     "ok": ("OK", lambda s: s in ("match", "notified", "silent")),
     "dup": ("doublons", lambda s: s == "duplicate"),
@@ -88,7 +94,7 @@ def render(app, flt=DEFAULT_FILTER, page=1):
         trips = "<br>".join(
             f"<span class='{'muted' if r.get('info_only') else 'ok' if r['ok'] else 'ko'}'>"
             f"{esc(r['name'])}{' (info)' if r.get('info_only') else ''} : "
-            f"{r['minutes'] if r.get('minutes') is not None else '—'} min</span> "
+            f"{r['minutes'] if r.get('minutes') is not None else '—'} min{short_counted(r)}</span> "
             f"<span class='muted'>{esc(r.get('summary') or r.get('reason') or '')}</span>"
             + (f"<details><summary class='muted'>itinéraire</summary><div class='muted' style='white-space:pre-line'>"
                f"{esc(chr(10).join(x.strip().replace('*', '') for x in steps_of(r)))}</div></details>"
