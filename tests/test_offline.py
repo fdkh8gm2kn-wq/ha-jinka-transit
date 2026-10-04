@@ -240,6 +240,23 @@ r2 = explore.run(t2, dests, 15, {}, max_minutes=75, cache=cache, pause=0)
 assert {r["nom"]: r["ok"] for r in r2["results"]} == {"Paris 15e": True, "Vincennes": False}
 assert r2["dests"][0]["max"] == 75
 print("recherche élargie : seuil 75 min, réutilisation des trajets :", t2.api_calls, "nouvel(s) appel(s) ✔")
+# Marche logement -> station limitée (5 min) : on garde le trajet dont la station est proche
+tw = Transit("k", ["metro", "rer"])
+fast_far = tw.check_journey({"duration": 20 * 60, "sections": [walk(9 * 60, to=stop("Loin")),
+                                                               pt("RER", "B", "RapidTransit", 600, "Loin", "Arcueil")]})
+slow_near = tw.check_journey({"duration": 28 * 60, "sections": [walk(4 * 60, to=stop("Proche")),
+                                                                pt("Métro", "4", "Metro", 1200, "Proche", "Arcueil")]})
+for c in (fast_far, slow_near):
+    c.pop("valid")
+cache_w = {}
+tw._fetch_best = lambda *a: {**fast_far, "candidates": [fast_far, slow_near]}
+r = tw.journey(1, 1, 2, 2, "09:00", 45, cache=cache_w, home_walk_max=5)
+assert r["ok"] and r["minutes"] == 28 and r["summary"] == "Métro 4", r
+r = tw.journey(1, 1, 2, 2, "09:00", 45, cache=cache_w, home_walk_max=3)
+assert not r["ok"] and "station à 4 min à pied du logement (max 3 min)" in r["reason"], r
+r = tw.journey(1, 1, 2, 2, "09:00", 45, cache=cache_w)  # sans limite : le plus rapide
+assert r["minutes"] == 20
+print("marche logement → station ≤ 5 min ✔")
 print("recherche élargie ✔")
 # Lecture du code dans un email Jinka
 import mailbox  # noqa: E402

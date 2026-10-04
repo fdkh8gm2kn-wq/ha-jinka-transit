@@ -40,7 +40,7 @@ ${flash}<div class="card"><b>Connexion Jinka :</b> ${jinka_status}
 <div class="card"><b>Dernier scan :</b> ${last_at} — ${last_status}${last_error}
 <form method="post" action="scan" style="display:inline;margin-left:12px"><button>Scanner maintenant</button></form></div>
 <div class="card"><b>Adresses</b><table><tr><th>Nom</th><th>Adresse saisie</th><th>Localisée à</th><th>Max</th><th>Arrivée</th></tr>${dests}</table>
-<div class="muted">Loyer max : ${rent} · Modes autorisés : ${modes} · marche max vers une station : ${walk} min</div></div>
+<div class="muted">Loyer max : ${rent} · Modes autorisés : ${modes} · marche max logement → station : ${home_walk} min · marche max côté destination : ${walk} min</div></div>
 <div class="card"><div class="filters">Afficher : ${filters}</div><div class="wrap"><table>
 <tr><th>Annonce</th><th>Statut</th><th>Trajets</th><th>Vue le</th></tr>${rows}</table></div></div>
 </main></body></html>""")
@@ -111,6 +111,7 @@ def render(app, flt):
         last_error=f" <span class='ko'>{esc(last['error'])}</span>" if last.get("error") else "",
         dests=dests, modes=esc(", ".join(app.opts.get("allowed_modes") or [])),
         walk=app.opts.get("max_walk_minutes", 15), filters=filters,
+        home_walk=app.opts.get("max_walk_home_minutes", 5),
         rent=f"{app.opts['max_rent']} €" if app.opts.get("max_rent") else "aucun",
         rows="".join(rows) or "<tr><td colspan=4 class='muted'>Rien pour l'instant</td></tr>")
 

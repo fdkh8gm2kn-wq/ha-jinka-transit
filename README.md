@@ -74,6 +74,7 @@ depuis le centre de chaque commune. Carte + liste à recopier dans le secteur de
   Ajoute `info_only: true` à une adresse pour avoir seulement son trajet dans le message, sans filtrer
   (ex. Gare du Nord) : il n'est calculé que pour les annonces retenues.
 - **max_rent** : loyer max en € (0 = pas de limite). Les annonces plus chères sont écartées sans calcul de trajet.
+- **max_walk_home_minutes** : marche max du logement à la 1re station (5 min par défaut).
 - **allowed_modes** : `metro`, `rer`, `transilien`, `tram`. Le bus est toujours exclu.
 - **max_walk_minutes** : marche max entre le logement / l'adresse et la station.
 - **jinka_alerts** : noms ou IDs d'alertes à surveiller (vide = toutes).

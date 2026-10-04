@@ -36,6 +36,9 @@ configuration:
   max_rent:
     name: Loyer max (€, charges comprises selon l'annonce)
     description: 0 = pas de limite. Vérifié avant le calcul des trajets.
+  max_walk_home_minutes:
+    name: Marche max logement → station (min)
+    description: Une annonce n'est retenue que si une station de métro/RER/tram est à moins de ce temps à pied du logement.
   max_walk_minutes:
     name: Marche max jusqu'à une station (min)
   whatsapp_phone:

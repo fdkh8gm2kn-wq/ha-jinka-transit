@@ -61,7 +61,8 @@ class App:
         refusées auparavant sont réévaluées."""
         o = self.opts
         key = json.dumps([o["destinations"], sorted(o.get("allowed_modes") or []),
-                          o.get("max_walk_minutes"), o.get("max_rent", 0)], sort_keys=True)
+                          o.get("max_walk_minutes"), o.get("max_rent", 0), o.get("max_walk_home_minutes", 5)],
+                         sort_keys=True)
         return hashlib.sha1(key.encode()).hexdigest()[:12]
 
     def load_state(self):
@@ -111,7 +112,8 @@ class App:
         # que pour les annonces retenues (économise les appels IDFM)
         for d in [d for d in dests if not d["info_only"]]:
             r = transit.journey(listing["lat"], listing["lng"], d["lat"], d["lon"],
-                                d["arrival_time"], d["max_minutes"], cache=cache)
+                                d["arrival_time"], d["max_minutes"], cache=cache,
+                                home_walk_max=int(self.opts.get("max_walk_home_minutes", 5)))
             results.append({"name": d["name"], "max": d["max_minutes"], **r})
             if not r["ok"]:
                 return "rejected", results, f"{d['name']} : {r['reason']}"

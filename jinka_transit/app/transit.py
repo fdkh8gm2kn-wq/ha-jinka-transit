@@ -111,12 +111,14 @@ class Transit:
 
     # ---------- itinéraires ----------
 
-    def journey(self, from_lat, from_lon, to_lat, to_lon, arrival_hhmm, max_minutes, cache=None):
+    def journey(self, from_lat, from_lon, to_lat, to_lon, arrival_hhmm, max_minutes, cache=None,
+                home_walk_max=None):
         """Meilleur trajet en transports lourds uniquement.
 
         Renvoie {"ok", "minutes", "summary", "steps", "reason"}. "ok" vaut True si un trajet sans bus
         existe et dure au plus max_minutes (marche comprise). Le trajet brut est mis en cache : changer
-        une durée max ne relance aucun appel à l'API."""
+        une durée max ne relance aucun appel à l'API.
+        `home_walk_max` : marche max (min) entre le point de départ (le logement) et la 1re station."""
         key = (f"{from_lat:.4f},{from_lon:.4f}>{to_lat:.5f},{to_lon:.5f}@{arrival_hhmm}"
                f"|{','.join(sorted(self.allowed))}|{self.max_walk}")
         hit = cache.get(key) if cache is not None else None
@@ -130,7 +132,17 @@ class Transit:
             err = best.get("error")
             return {"ok": False, "minutes": None, "summary": "", "steps": [],
                     "reason": "aucun trajet métro/RER" + (f" ({err})" if err else "")}
-        r = dict(best)
+        # anciens caches : un seul trajet ; nouveaux : tous les trajets valides, du plus court au plus long
+        candidates = best.get("candidates") or [best]
+        if home_walk_max is not None:
+            near = [c for c in candidates if home_walk(c) <= home_walk_max]
+            if not near:
+                closest = min(home_walk(c) for c in candidates)
+                return {"ok": False, "minutes": candidates[0]["minutes"], "summary": candidates[0]["summary"],
+                        "steps": candidates[0].get("steps", []),
+                        "reason": f"station à {closest} min à pied du logement (max {home_walk_max} min)"}
+            candidates = near
+        r = {k: v for k, v in candidates[0].items() if k != "candidates"}
         r["ok"] = r["minutes"] <= max_minutes
         r["reason"] = "" if r["ok"] else f"{r['minutes']} min > {max_minutes} min"
         return r
@@ -150,15 +162,15 @@ class Transit:
         params += [("forbidden_uris[]", f"physical_mode:{m}") for m in self.forbidden]
         self.api_calls += 1
         data = self._prim("/journeys", params) or {}
-        best = None
+        candidates = []
         for j in data.get("journeys") or []:
             check = self.check_journey(j)
-            if check["valid"] and (best is None or check["minutes"] < best["minutes"]):
-                best = check
-        if best is None:
+            if check.pop("valid"):
+                candidates.append(check)
+        if not candidates:
             return {"none": True, "error": (data.get("error") or {}).get("message")}
-        best.pop("valid")
-        return best
+        candidates.sort(key=lambda c: c["minutes"])
+        return {**candidates[0], "candidates": candidates}
 
     def check_journey(self, j):
         """Valide un trajet (aucun mode interdit) et le détaille étape par étape."""
@@ -234,3 +246,11 @@ def walk_length(s):
     if props and props[0].get("length"):
         return int(props[0]["length"])
     return int(s.get("duration", 0) * 1.25)
+
+
+def home_walk(journey):
+    """Minutes de marche entre le départ (logement) et la 1re station ; 0 pour un trajet tout à pied."""
+    steps = journey.get("steps") or []
+    if steps and steps[0].get("kind") == "walk" and steps[0].get("role") == "start":
+        return steps[0].get("minutes", 0)
+    return 0
