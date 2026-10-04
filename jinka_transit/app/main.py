@@ -204,6 +204,7 @@ class App:
                                   "reason": f"doublon de {twin['listing'].get('source') or twin['listing']['link']}",
                                   "ts": time.time()}
                 stats["doublons"] += 1
+                self.count_daily(l, "doublons")
                 continue
             try:
                 status, results, reason = self.evaluate(l, dests, transit)
@@ -213,6 +214,9 @@ class App:
                 break
             stats["évaluées"] += 1
             stats["ok" if status == "match" else "refusées"] += 1
+            self.count_daily(l, "testées")
+            if status == "match":
+                self.count_daily(l, "retenues")
             known[l["id"]] = {"status": status, "crit": crit, "listing": l, "results": results,
                               "reason": reason, "ts": time.time()}
             log.info("%s %s — %s", "✅" if status == "match" else "❌", title_of(l),
@@ -266,6 +270,66 @@ class App:
                 self.report_error("scan", f"Le scan a échoué : {type(e).__name__} : {e}")
 
     # ---------- alertes d'erreur par email ----------
+
+    # ---------- rapport quotidien ----------
+
+    def count_daily(self, listing, kind):
+        site = "Bien'ici" if listing.get("alert_id") == "bienici" else "Jinka"
+        d = self.state.setdefault("daily", {"since": time.time(), "sites": {}})
+        c = d["sites"].setdefault(site, {"testées": 0, "retenues": 0, "doublons": 0, "liens": []})
+        c[kind] += 1
+        if kind == "retenues":
+            c["liens"].append(f"{title_of(listing)} — {listing['link']}")
+
+    def daily_report_due(self, now=None):
+        now = now or datetime.now()
+        at = (self.opts.get("daily_report_time") or "").strip()
+        if not at or not (self.opts.get("daily_report_email") or "").strip():
+            return False
+        try:
+            h, m = map(int, at.split(":"))
+        except ValueError:
+            return False
+        return now.hour * 60 + now.minute >= h * 60 + m and self.state.get("daily_sent") != now.strftime("%Y-%m-%d")
+
+    def send_daily_report(self, now=None):
+        """Email du matin : annonces testées / retenues par site depuis le dernier rapport."""
+        now = now or datetime.now()
+        d = self.state.get("daily") or {"since": time.time(), "sites": {}}
+        since = datetime.fromtimestamp(d["since"])
+        o = self.opts
+        n = Notifier(email_to=o.get("daily_report_email"), smtp_user=o.get("mail_user") or o.get("jinka_email"),
+                     smtp_password=o.get("mail_password"), smtp_server=o.get("smtp_server"))
+        if not n.email_ok:
+            return False
+        sites = {k: d["sites"].get(k) or {"testées": 0, "retenues": 0, "doublons": 0, "liens": []}
+                 for k in ("Jinka", "Bien'ici")}
+        tot_t = sum(c["testées"] for c in sites.values())
+        tot_r = sum(c["retenues"] for c in sites.values())
+        lines = [f"Depuis le {since:%d/%m à %H:%M} :", ""]
+        rows = ""
+        for site, c in sites.items():
+            dup = f", {c['doublons']} doublons écartés" if c["doublons"] else ""
+            lines.append(f"{site} : {c['testées']} annonces testées, {c['retenues']} retenues{dup}")
+            lines += [f"   ✅ {x}" for x in c["liens"]]
+            rows += (f"<tr><td>{site}</td><td align=right>{c['testées']}</td><td align=right><b>{c['retenues']}</b></td>"
+                     f"<td align=right>{c['doublons']}</td></tr>")
+        lines += ["", f"Total : {tot_t} testées, {tot_r} retenues.",
+                  f"Dernier scan : {self.last_scan.get('at') or '—'} ({self.last_scan.get('error') or 'ok'})"]
+        links = "".join(f"<li>{x.rsplit(' — ', 1)[0]} — <a href='{x.rsplit(' — ', 1)[1]}'>voir</a> ({site})</li>"
+                        for site, c in sites.items() for x in c["liens"])
+        html = (f"<p>Depuis le {since:%d/%m à %H:%M} :</p>"
+                "<table border=1 cellpadding=6 style='border-collapse:collapse'>"
+                "<tr><th>Site</th><th>Testées</th><th>Retenues</th><th>Doublons</th></tr>"
+                f"{rows}<tr><td><b>Total</b></td><td align=right>{tot_t}</td><td align=right><b>{tot_r}</b></td><td></td></tr></table>"
+                + (f"<p>Annonces retenues :</p><ul>{links}</ul>" if links else "")
+                + f"<p style='color:#888'>Dernier scan : {self.last_scan.get('at') or '—'} ({self.last_scan.get('error') or 'ok'})</p>")
+        if n._email(f"📊 Jinka Transit : {tot_t} annonces testées, {tot_r} retenues", "\n".join(lines), html):
+            self.state["daily"] = {"since": time.time(), "sites": {}}
+            self.state["daily_sent"] = now.strftime("%Y-%m-%d")
+            self.save_state()
+            return True
+        return False
 
     def error_notifier(self):
         o = self.opts
@@ -485,7 +549,7 @@ class App:
         normal = int(normal * jitter)
         # on ne déborde pas sur le début de la plage de journée ni de la nuit
         nxt = [normal]
-        for spec in (self.opts.get("peak_hours"), self.opts.get("quiet_hours")):
+        for spec in (self.opts.get("peak_hours"), self.opts.get("quiet_hours"), self.opts.get("daily_report_time")):
             try:
                 start = datetime.strptime((spec or "").split("-")[0].strip(), "%H:%M")
             except ValueError:
@@ -508,6 +572,12 @@ class App:
                 self.scan_now.clear()
                 continue
             self.run_once()
+            if self.daily_report_due():
+                try:
+                    with self.lock:
+                        self.send_daily_report()
+                except Exception:  # noqa: BLE001
+                    log.exception("Rapport quotidien non envoyé")
             manual = self.scan_now.wait(self.scan_interval())
             self.scan_now.clear()
 

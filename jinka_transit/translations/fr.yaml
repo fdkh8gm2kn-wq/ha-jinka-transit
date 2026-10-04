@@ -65,6 +65,12 @@ configuration:
     description: >-
       En cas de panne (connexion Jinka, API IDFM, Bien'ici, envoi des annonces…), un email part vers cette
       adresse (au plus un toutes les 6 h pour la même erreur), puis un autre quand c'est rétabli. Vide = désactivé.
+  daily_report_email:
+    name: Rapport quotidien envoyé à
+    description: Chaque matin, nombre d'annonces testées et retenues par site (Jinka, Bien'ici). Vide = pas de rapport.
+  daily_report_time:
+    name: Heure du rapport quotidien
+    description: Format HH:MM (ex. 08:00).
   smtp_server:
     name: Serveur SMTP (optionnel)
     description: Vide = deviné d'après l'adresse de la boîte dédiée (smtp.gmail.com pour Gmail).

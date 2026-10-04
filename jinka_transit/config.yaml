@@ -1,5 +1,5 @@
 name: Jinka Transit
-version: "1.9.6"
+version: "1.9.7"
 slug: jinka_transit
 description: Annonces Jinka filtrées par temps de trajet en métro/RER/tram (sans bus) vers tes adresses
 url: https://github.com/fdkh8gm2kn-wq/ha-jinka-transit
@@ -51,6 +51,8 @@ options:
   max_walk_home_minutes: 5
   email_to: ""
   error_email: ""
+  daily_report_email: ""
+  daily_report_time: "08:00"
   free_sms_user: ""
   free_sms_key: ""
   whatsapp_phone: ""
@@ -91,6 +93,8 @@ schema:
   max_walk_home_minutes: "int(1,30)?"
   email_to: "str?"
   error_email: "str?"
+  daily_report_email: "str?"
+  daily_report_time: "str?"
   smtp_server: "str?"
   free_sms_user: "str?"
   free_sms_key: "password?"

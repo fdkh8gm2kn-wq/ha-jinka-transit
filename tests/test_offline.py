@@ -465,3 +465,20 @@ assert len({app.scan_interval(_dt(2026, 10, 5, 10, 0)) for _ in range(20)}) > 1
 assert app.scan_interval(_dt(2026, 10, 5, 7, 55)) == 300   # s'arrête à 8h pile
 assert app.scan_interval(_dt(2026, 10, 5, 23, 50)) == 600  # s'arrête à minuit
 print("Intervalle jour / soir ✔")
+# Rapport quotidien
+sent_mail.clear()
+app.opts.update({"daily_report_email": "rapport@example.org", "daily_report_time": "08:00"})
+app.state.pop("daily", None); app.state.pop("daily_sent", None)
+app.count_daily({"alert_id": "x"}, "testées")
+app.count_daily(L["ad1"]["listing"], "testées"); app.count_daily(L["ad1"]["listing"], "retenues")
+app.count_daily({"alert_id": "bienici"}, "testées"); app.count_daily({"alert_id": "bienici"}, "doublons")
+assert not app.daily_report_due(_dt(2026, 10, 5, 7, 59))
+assert app.daily_report_due(_dt(2026, 10, 5, 8, 1))
+assert app.send_daily_report(_dt(2026, 10, 5, 8, 1))
+m = [x[1] for x in sent_mail if x[0] == "msg"][-1]
+body = m.get_body(("plain",)).get_content()
+assert m["To"] == "rapport@example.org" and "3 annonces testées, 1 retenues" in m["Subject"], m["Subject"]
+assert "Jinka : 2 annonces testées, 1 retenues" in body and "Bien'ici : 1 annonces testées, 0 retenues, 1 doublons" in body, body
+assert not app.daily_report_due(_dt(2026, 10, 5, 9, 0)) and app.daily_report_due(_dt(2026, 10, 6, 8, 0))
+assert app.state["daily"]["sites"] == {}
+print("Rapport quotidien ✔")
