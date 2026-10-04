@@ -400,6 +400,12 @@ assert n["link"] == "https://www.bienici.com/annonce/bi-1" and n["lat"] == 1.0 a
 assert bienici.normalize(bi_ads[1])["lat"] is None  # position floutée à 1 km : ignorée
 assert bienici.same_flat(n, L["ad1"]["listing"])  # même logement que l'annonce Jinka ad1 (Vincennes 1500 € 60 m²)
 assert fmt.building_info(n) == "rez-de-chaussée · digicode"
+assert not n["coliving"]
+assert bienici.is_coliving({"flatSharing": True})
+assert bienici.is_coliving({"title": "Chambre meublée de 12 m² avec accès balcon – Coloc"})
+assert bienici.is_coliving({"title": "Location Appartement 5 pièces", "description": "Une chambre en colocation est disponible"})
+assert not bienici.is_coliving({"title": "Studio meublé", "description": "Pas de colocation possible. Proche métro."})
+assert app.evaluate({**n, "coliving": True}, [], None)[2] == "chambre en colocation"
 _prev2 = urllib.request.urlopen
 def urlopen_bi(req, timeout=None):
     if "bienici.com/realEstateAds.json" in req.full_url:

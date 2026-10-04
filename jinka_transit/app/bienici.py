@@ -6,6 +6,7 @@ Les annonces sont converties au même format que celles de Jinka (voir jinka.nor
 import json
 import logging
 import os
+import re
 import time
 import urllib.parse
 
@@ -99,7 +100,19 @@ def normalize(ad):
         "description": (ad.get("description") or "").replace("<br>", "\n")[:2000],
         "floor": ad.get("floor"),
         "safety": safety,
+        "coliving": is_coliving(ad),
     }
+
+
+COLIVING_RE = re.compile(r"^\s*(chambre|colocation)\b|chambre[^.]{0,40}\b(en|dans une?)\s+coloc|\bcolocation\s+(meubl|neuve|à)",
+                         re.I)
+
+
+def is_coliving(ad):
+    """Chambre en colocation (exclue, comme sur les alertes Jinka) ?"""
+    if ad.get("flatSharing"):
+        return True
+    return bool(COLIVING_RE.search(f"{ad.get('title') or ''}\n{(ad.get('description') or '')[:300]}"))
 
 
 def same_flat(a, b):

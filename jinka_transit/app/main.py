@@ -103,6 +103,8 @@ class App:
         return out
 
     def evaluate(self, listing, dests, transit):
+        if listing.get("coliving"):
+            return "rejected", [], "chambre en colocation"
         max_rent = int(self.opts.get("max_rent") or 0)
         if max_rent and listing.get("rent") and listing["rent"] > max_rent:
             return "rejected", [], f"loyer {int(listing['rent'])} € > {max_rent} €"
