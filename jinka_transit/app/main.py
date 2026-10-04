@@ -7,7 +7,7 @@ import logging
 import os
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from fmt import body_of, html_of, short_of, title_of
 from jinka import Jinka, JinkaAuthError
@@ -449,11 +449,40 @@ class App:
         log.info("Connexion automatique à Jinka réussie.")
         return token
 
+    def quiet_seconds_left(self, now=None):
+        """Secondes restantes de la pause nocturne (0 si on est hors pause). Format "HH:MM-HH:MM", vide = pas de pause."""
+        spec = (self.opts.get("quiet_hours") or "").strip()
+        if not spec:
+            return 0
+        try:
+            start, end = [datetime.strptime(x.strip(), "%H:%M").time() for x in spec.split("-")]
+        except ValueError:
+            log.warning("Pause nocturne invalide : %r (attendu par ex. 00:00-07:00)", spec)
+            return 0
+        now = now or datetime.now()
+        t = now.time()
+        inside = start <= t < end if start <= end else (t >= start or t < end)
+        if not inside:
+            return 0
+        end_dt = now.replace(hour=end.hour, minute=end.minute, second=0, microsecond=0)
+        if end_dt <= now:
+            end_dt += timedelta(days=1)
+        return int((end_dt - now).total_seconds())
+
     def loop(self):
+        manual = False
         while True:
+            self.opts = self.load_options()
+            quiet = self.quiet_seconds_left()
+            if quiet and not manual:
+                log.info("Pause nocturne (%s) : reprise des scans dans %d min.",
+                         self.opts.get("quiet_hours"), quiet // 60 + 1)
+                manual = self.scan_now.wait(quiet + 5)
+                self.scan_now.clear()
+                continue
             self.run_once()
             interval = max(5, int(self.opts.get("scan_interval_minutes", 15))) * 60
-            self.scan_now.wait(interval)
+            manual = self.scan_now.wait(interval)
             self.scan_now.clear()
 
 

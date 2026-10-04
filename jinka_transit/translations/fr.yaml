@@ -82,6 +82,11 @@ configuration:
   ha_notify_service:
     name: Service de notification HA (optionnel)
     description: Ex. notify.mobile_app_iphone_de_nicolas — en plus ou à la place de WhatsApp.
+  quiet_hours:
+    name: Pause nocturne (pas de scan)
+    description: >-
+      Plage horaire sans scan, format HH:MM-HH:MM (ex. 00:00-07:00). Vide = scans jour et nuit.
+      Le bouton « Scanner maintenant » marche quand même.
   scan_interval_minutes:
     name: Fréquence des scans (min)
   max_pages_per_alert:

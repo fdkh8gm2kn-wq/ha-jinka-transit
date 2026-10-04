@@ -447,3 +447,13 @@ assert len([m for m in sent_mail if m[0] == "msg"]) == 2  # vide = désactivé
 app.scan = _scan
 print("Emails d'erreur ✔")
 print("\nTous les tests passent ✔")
+from datetime import datetime as _dt
+app.opts["quiet_hours"] = "00:00-07:00"
+assert app.quiet_seconds_left(_dt(2026, 10, 5, 6, 30)) == 1800
+assert app.quiet_seconds_left(_dt(2026, 10, 5, 7, 0)) == 0
+assert app.quiet_seconds_left(_dt(2026, 10, 5, 23, 59)) == 0
+app.opts["quiet_hours"] = "23:00-07:00"
+assert app.quiet_seconds_left(_dt(2026, 10, 5, 23, 30)) == 7.5 * 3600
+app.opts["quiet_hours"] = ""
+assert app.quiet_seconds_left(_dt(2026, 10, 5, 3, 0)) == 0
+print("Pause nocturne ✔")

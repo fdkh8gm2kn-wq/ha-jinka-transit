@@ -1,5 +1,5 @@
 name: Jinka Transit
-version: "1.9.2"
+version: "1.9.3"
 slug: jinka_transit
 description: Annonces Jinka filtrées par temps de trajet en métro/RER/tram (sans bus) vers tes adresses
 url: https://github.com/fdkh8gm2kn-wq/ha-jinka-transit
@@ -57,6 +57,7 @@ options:
   whatsapp_callmebot_apikey: ""
   ha_notify_service: ""
   scan_interval_minutes: 15
+  quiet_hours: "00:00-07:00"
   max_pages_per_alert: 3
   max_notifications_per_run: 10
   notify_existing_on_first_run: true
@@ -95,6 +96,7 @@ schema:
   whatsapp_callmebot_apikey: "password?"
   ha_notify_service: "str?"
   scan_interval_minutes: "int(5,1440)"
+  quiet_hours: "str?"
   max_pages_per_alert: "int(1,20)"
   max_notifications_per_run: "int(1,50)"
   notify_existing_on_first_run: bool
