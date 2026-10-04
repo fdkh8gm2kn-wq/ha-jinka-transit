@@ -66,6 +66,14 @@ Lien « 🗺️ Zones compatibles » dans la page de l'add-on : calcule, sans Ji
 (et arrondissements de Paris) d'où tes adresses de filtre sont joignables sans bus dans le temps voulu,
 depuis le centre de chaque commune. Carte + liste à recopier dans le secteur de ton alerte Jinka.
 
+## Notifications
+
+- **Email** (`email_to`) : annonce complète (photo, itinéraires détaillés, bouton vers l'annonce), envoyée
+  depuis la boîte Gmail dédiée avec la même clé d'application Google.
+- **SMS Free Mobile** (`free_sms_user` + `free_sms_key`) : version courte (prix, ville, temps, lien), gratuite,
+  vers le numéro de la ligne Free qui a activé l'option « Notifications par SMS ».
+- WhatsApp (CallMeBot) et service notify de Home Assistant restent possibles. Tous les canaux configurés sont utilisés.
+
 ## Réglages
 
 - **destinations** : jusqu'à 5. Chaque ligne : `name`, `address` (adresse postale, « Gare de Lyon »,

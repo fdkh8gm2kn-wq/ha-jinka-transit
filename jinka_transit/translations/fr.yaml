@@ -41,6 +41,19 @@ configuration:
     description: Une annonce n'est retenue que si une station de métro/RER/tram est à moins de ce temps à pied du logement.
   max_walk_minutes:
     name: Marche max jusqu'à une station (min)
+  email_to:
+    name: Envoyer les annonces par email à
+    description: >-
+      Ton adresse (plusieurs possibles, séparées par des virgules). L'email part de la boîte Gmail dédiée,
+      avec la même clé d'application Google : rien d'autre à configurer.
+  smtp_server:
+    name: Serveur SMTP (optionnel)
+    description: Vide = deviné d'après l'adresse de la boîte dédiée (smtp.gmail.com pour Gmail).
+  free_sms_user:
+    name: SMS Free Mobile — identifiant
+    description: Espace abonné Free Mobile → Mes options → « Notifications par SMS » (gratuit, SMS vers ton numéro).
+  free_sms_key:
+    name: SMS Free Mobile — clé d'identification
   whatsapp_phone:
     name: Numéro WhatsApp
     description: Format international, ex. +33612345678

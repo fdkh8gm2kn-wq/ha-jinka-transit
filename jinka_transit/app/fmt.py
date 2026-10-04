@@ -74,3 +74,36 @@ def body_of(v):
     if l.get("source"):
         lines.append(f"Source : {l['source']} · alerte « {l['alert_name']} »")
     return "\n".join(lines)
+
+
+def short_of(v):
+    """Version SMS : une ligne par adresse du filtre, puis le lien."""
+    l = v["listing"]
+    trips = " · ".join(f"{r['name'].split(' (')[0]} {r['minutes']}'" for r in v["results"]
+                       if not r.get("info_only") and r.get("minutes") is not None)
+    return f"{title_of(l)}\n{trips}\n{l['link']}"
+
+
+def html_of(v):
+    """Version email : photo, trajets détaillés et bouton vers l'annonce."""
+    from html import escape as e
+    l = v["listing"]
+    blocks = []
+    for r in v["results"]:
+        if r.get("minutes") is None:
+            blocks.append(f"<p style='color:#666'>ℹ️ <b>{e(r['name'])}</b> : {e(r.get('reason') or 'pas de trajet')}</p>")
+            continue
+        head = (f"ℹ️ <b>{e(r['name'])}</b> (pour info) — {r['minutes']} min" if r.get("info_only")
+                else f"📍 <b>{e(r['name'])}</b> — <b>{r['minutes']} min</b> porte à porte (max {r.get('max', '?')})")
+        steps = "".join(f"<li>{e(s.strip().replace('*', ''))}</li>" for s in steps_of(r))
+        blocks.append(f"<p style='margin:14px 0 4px'>{head}</p><ul style='margin:0;padding-left:18px;color:#333'>{steps}</ul>")
+    img = (f"<img src='{e(l['image'])}' alt='' style='width:100%;max-width:560px;border-radius:10px'>"
+           if l.get("image") else "")
+    maps = (f" · <a href='https://maps.google.com/?q={l['lat']},{l['lng']}'>voir sur la carte</a>"
+            if l.get("lat") is not None else "")
+    return f"""<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:560px;color:#1c1c1c">
+<h2 style="font-size:18px;margin:0 0 10px">{e(title_of(l))}</h2>{img}
+{''.join(blocks)}
+<p style="margin:18px 0"><a href="{e(l['link'])}" style="background:#0b63ce;color:#fff;padding:10px 16px;
+border-radius:8px;text-decoration:none">Voir l'annonce</a>{maps}</p>
+<p style="color:#888;font-size:12px">{e(l.get('source') or '')} · alerte « {e(l.get('alert_name') or '')} » · Jinka Transit</p></div>"""

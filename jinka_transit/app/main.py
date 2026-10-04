@@ -9,7 +9,7 @@ import threading
 import time
 from datetime import datetime
 
-from fmt import body_of, title_of
+from fmt import body_of, html_of, short_of, title_of
 from jinka import Jinka, JinkaAuthError
 from notify import Notifier
 from transit import CACHE_TTL, Transit, TransitError
@@ -135,7 +135,10 @@ class App:
         jinka = Jinka(o.get("jinka_email"), password, token)
         transit = Transit(o["prim_api_key"], o.get("allowed_modes"), o.get("max_walk_minutes", 15))
         notifier = Notifier(o.get("whatsapp_phone"), o.get("whatsapp_callmebot_apikey"),
-                            o.get("ha_notify_service"))
+                            o.get("ha_notify_service"), email_to=o.get("email_to"),
+                            smtp_user=o.get("mail_user") or o.get("jinka_email"),
+                            smtp_password=o.get("mail_password"), smtp_server=o.get("smtp_server"),
+                            free_sms_user=o.get("free_sms_user"), free_sms_key=o.get("free_sms_key"))
         dests = self.resolve_destinations(transit)
         crit = self.criteria_hash()
 
@@ -192,7 +195,8 @@ class App:
         limit = int(o.get("max_notifications_per_run", 10))
         sent = 0
         for v in pending[:limit]:
-            if notifier.send(title_of(v["listing"]), body_of(v), v["listing"]["link"], v["listing"]["image"]):
+            if notifier.send(title_of(v["listing"]), body_of(v), v["listing"]["link"], v["listing"]["image"],
+                             short=short_of(v), html=html_of(v)):
                 v["status"] = "notified"
                 v["notified_at"] = time.time()
                 sent += 1

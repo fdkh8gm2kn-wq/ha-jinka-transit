@@ -135,6 +135,7 @@ def fake_urlopen(req, timeout=None):
 
 urllib.request.urlopen = fake_urlopen
 import notify  # noqa: E402
+import fmt  # noqa: E402
 notify.time.sleep = lambda s: None
 
 import main  # noqa: E402
@@ -300,4 +301,35 @@ assert app.auto_login_possible()
 assert app.auto_login() == "tok" and sent_codes == ["moi@gmx.fr"]
 assert app.state["jinka_auth"]["token"] == "tok" and not app.auto_login_possible()  # 1 essai / 20 min
 print("connexion automatique par email ✔")
+# Email (SMTP Gmail) + SMS Free Mobile
+import smtplib  # noqa: E402
+sent_mail = []
+class FakeSMTP:
+    def __init__(self, host, port, timeout=None): sent_mail.append(("host", host, port))
+    def __enter__(self): return self
+    def __exit__(self, *a): pass
+    def login(self, u, p): sent_mail.append(("login", u, p))
+    def send_message(self, m): sent_mail.append(("msg", m))
+smtplib.SMTP_SSL = FakeSMTP
+sms = []
+_orig = urllib.request.urlopen
+def urlopen_sms(req, timeout=None):
+    if "smsapi.free-mobile.fr" in req.full_url:
+        sms.append(req.full_url); return FakeResp("")
+    return _orig(req, timeout)
+urllib.request.urlopen = urlopen_sms
+nt = notify.Notifier(email_to="moi@perso.fr", smtp_user="dedie@gmail.com", smtp_password="abcd efgh ijkl mnop",
+                     free_sms_user="12345678", free_sms_key="clef")
+v = L["ad1"]
+assert nt.send(main.title_of(v["listing"]), main.body_of(v), v["listing"]["link"], None,
+               short=fmt.short_of(v), html=fmt.html_of(v))
+assert ("host", "smtp.gmail.com", 465) in sent_mail and ("login", "dedie@gmail.com", "abcdefghijklmnop") in sent_mail
+m = [x[1] for x in sent_mail if x[0] == "msg"][0]
+assert m["To"] == "moi@perso.fr" and "Vincennes" in m["Subject"]
+html_part = m.get_body(("html",)).get_content()
+assert "Voir l'annonce" in html_part and "RER A" in html_part
+from urllib.parse import parse_qs as pq, urlparse as up  # noqa: E402
+txt = pq(up(sms[0]).query)["msg"][0]
+assert txt.splitlines()[1] == "Bureau 25' · École 25'" and txt.splitlines()[2].startswith("https://"), txt
+print("email + SMS ✔ :", txt.replace("\n", " | "))
 print("\nTous les tests passent ✔")
