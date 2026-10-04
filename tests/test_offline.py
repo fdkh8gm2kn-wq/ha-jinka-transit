@@ -332,4 +332,11 @@ from urllib.parse import parse_qs as pq, urlparse as up  # noqa: E402
 txt = pq(up(sms[0]).query)["msg"][0]
 assert txt.splitlines()[1] == "Bureau 25' · École 25'" and txt.splitlines()[2].startswith("https://"), txt
 print("email + SMS ✔ :", txt.replace("\n", " | "))
+# Bouton de test des notifications
+app.opts.update(email_to="moi@perso.fr", jinka_email="dedie@gmail.com", mail_password="x", free_sms_user="1", free_sms_key="k",
+                whatsapp_phone="", whatsapp_callmebot_apikey="", ha_notify_service="")
+app.load_options = lambda: app.opts
+res = app.send_test()
+assert res == [("email", True), ("SMS Free", True)], res
+print("notification de test ✔")
 print("\nTous les tests passent ✔")

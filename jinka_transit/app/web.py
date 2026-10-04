@@ -38,7 +38,8 @@ ${flash}<div class="card"><b>Connexion Jinka :</b> ${jinka_status}
 <form method="post" action="jinka/send" class="row"><input type="email" name="email" value="${jinka_email}"
  placeholder="ton email Jinka" required><button>Recevoir un code</button></form>${code_form}${auto_form}</div>
 <div class="card"><b>Dernier scan :</b> ${last_at} — ${last_status}${last_error}
-<form method="post" action="scan" style="display:inline;margin-left:12px"><button>Scanner maintenant</button></form></div>
+<form method="post" action="scan" style="display:inline;margin-left:12px"><button>Scanner maintenant</button></form>
+<form method="post" action="notify/test" style="display:inline;margin-left:8px"><button>Envoyer une notification de test</button></form></div>
 <div class="card"><b>Adresses</b><table><tr><th>Nom</th><th>Adresse saisie</th><th>Localisée à</th><th>Max</th><th>Arrivée</th></tr>${dests}</table>
 <div class="muted">Loyer max : ${rent} · Modes autorisés : ${modes} · marche max logement → station : ${home_walk} min · marche max côté destination : ${walk} min</div></div>
 <div class="card"><div class="filters">Afficher : ${filters}</div><div class="wrap"><table>
@@ -151,6 +152,14 @@ def start(app, port=8099):
                     app.flash = "📧 Code envoyé : regarde tes emails et saisis-le ci-dessous."
                 except Exception as e:  # noqa: BLE001
                     app.flash = f"<span class='ko'>{html.escape(str(e))}</span>"
+            elif path.endswith("notify/test"):
+                try:
+                    res = app.send_test()
+                    app.flash = " · ".join(
+                        f"<span class='{'ok' if ok else 'ko'}'>{'✅' if ok else '❌'} {html.escape(name)}</span>"
+                        for name, ok in res) + " <span class='muted'>(détail des erreurs dans le Journal)</span>"
+                except Exception as e:  # noqa: BLE001
+                    app.flash = f"<span class='ko'>{html.escape(str(e))}</span>"
             elif path.endswith("jinka/auto"):
                 try:
                     app.auto_login_now()
@@ -168,7 +177,7 @@ def start(app, port=8099):
                                       max(10, min(180, int(form.get("max_minutes") or 45))))
                 except Exception as e:  # noqa: BLE001
                     app.explore_progress = {"error": str(e)}
-            redirect = "../" if "/jinka/" in self.path else "../explore" if "/explore/" in self.path else "./"
+            redirect = "../" if ("/jinka/" in self.path or "/notify/" in self.path) else "../explore" if "/explore/" in self.path else "./"
             # redirection relative : fonctionne derrière l'Ingress de Home Assistant
             self.send_response(303)
             self.send_header("Location", redirect)

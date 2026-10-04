@@ -134,11 +134,7 @@ class App:
         password = "" if o.get("mail_password") else o.get("jinka_password")
         jinka = Jinka(o.get("jinka_email"), password, token)
         transit = Transit(o["prim_api_key"], o.get("allowed_modes"), o.get("max_walk_minutes", 15))
-        notifier = Notifier(o.get("whatsapp_phone"), o.get("whatsapp_callmebot_apikey"),
-                            o.get("ha_notify_service"), email_to=o.get("email_to"),
-                            smtp_user=o.get("mail_user") or o.get("jinka_email"),
-                            smtp_password=o.get("mail_password"), smtp_server=o.get("smtp_server"),
-                            free_sms_user=o.get("free_sms_user"), free_sms_key=o.get("free_sms_key"))
+        notifier = self.make_notifier()
         dests = self.resolve_destinations(transit)
         crit = self.criteria_hash()
 
@@ -225,6 +221,33 @@ class App:
                     log.exception("Scan échoué : %s", e)
                 self.last_scan = {"at": started.isoformat(timespec="seconds"), "error": str(e),
                                   "status": "erreur"}
+
+    def make_notifier(self):
+        o = self.opts
+        return Notifier(o.get("whatsapp_phone"), o.get("whatsapp_callmebot_apikey"),
+                        o.get("ha_notify_service"), email_to=o.get("email_to"),
+                        smtp_user=o.get("mail_user") or o.get("jinka_email"),
+                        smtp_password=o.get("mail_password"), smtp_server=o.get("smtp_server"),
+                        free_sms_user=o.get("free_sms_user"), free_sms_key=o.get("free_sms_key"))
+
+    def send_test(self):
+        """Bouton « notification de test » : envoie un message sur chaque canal et dit lequel marche."""
+        self.opts = self.load_options()
+        n = self.make_notifier()
+        title = "🧪 Jinka Transit : test de notification"
+        text = "Si tu lis ce message, ce canal fonctionne."
+        results = []
+        if n.email_ok:
+            results.append(("email", n._email(title, text, f"<p>{text}</p>")))
+        if n.sms_ok:
+            results.append(("SMS Free", n._free_sms(f"{title}\n{text}")))
+        if n.phone and n.apikey:
+            results.append(("WhatsApp", n._whatsapp(f"*{title}*\n{text}")))
+        if n.ha_service:
+            results.append(("Home Assistant", n._home_assistant(title, text, None, None)))
+        if not results:
+            raise RuntimeError("Aucun canal de notification n'est configuré.")
+        return results
 
     # ---------- connexion Jinka par code email ----------
 
