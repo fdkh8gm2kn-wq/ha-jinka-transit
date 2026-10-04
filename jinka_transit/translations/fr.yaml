@@ -87,7 +87,7 @@ configuration:
     description: À obtenir gratuitement en suivant callmebot.com/blog/free-api-whatsapp-messages (voir la doc).
   ha_notify_service:
     name: Service de notification HA (optionnel)
-    description: Ex. notify.mobile_app_iphone_de_nicolas — en plus ou à la place de WhatsApp.
+    description: Inutilisé (accès à l'API Home Assistant désactivé par sécurité depuis la 1.9.8).
   quiet_hours:
     name: Pause nocturne (pas de scan)
     description: >-

@@ -1,5 +1,5 @@
 name: Jinka Transit
-version: "1.9.7"
+version: "1.9.8"
 slug: jinka_transit
 description: Annonces Jinka filtrées par temps de trajet en métro/RER/tram (sans bus) vers tes adresses
 url: https://github.com/fdkh8gm2kn-wq/ha-jinka-transit
@@ -10,7 +10,6 @@ arch:
 init: false
 startup: application
 boot: auto
-homeassistant_api: true
 ingress: true
 ingress_port: 8099
 panel_icon: mdi:home-search

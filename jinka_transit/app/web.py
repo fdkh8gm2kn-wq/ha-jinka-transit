@@ -2,6 +2,7 @@
 
 import html
 import json
+import os
 import threading
 from string import Template
 from urllib.parse import parse_qs
@@ -45,6 +46,11 @@ ${flash}<div class="card"><b>Connexion Jinka :</b> ${jinka_status}
 <div class="card"><div class="filters">Afficher : ${filters}</div><div class="wrap"><table>
 <tr><th>Annonce</th><th>Statut</th><th>Trajets</th><th>Vue le</th></tr>${rows}</table></div></div>
 </main></body></html>""")
+
+
+def safe_json(obj):
+    """JSON utilisable dans une balise <script> (impossible d'en sortir avec « </script> »)."""
+    return json.dumps(obj).replace("<", "\\u003c")
 
 
 def render(app, flt):
@@ -118,10 +124,20 @@ def render(app, flt):
         rows="".join(rows) or "<tr><td colspan=4 class='muted'>Rien pour l'instant</td></tr>")
 
 
+INGRESS_IP = "172.30.32.2"  # seul client autorisé dans HA : le proxy Ingress (déjà authentifié par HA)
+ALLOW_ALL = os.environ.get("WEB_ALLOW_ALL") == "1"  # test local (docker-compose)
+
+
 def start(app, port=8099):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args):
             pass
+
+        def _allowed(self):
+            if ALLOW_ALL or self.client_address[0] in (INGRESS_IP, "127.0.0.1", "::1"):
+                return True
+            self._send(403, "Accès réservé à l'interface Home Assistant (Ingress).", "text/plain; charset=utf-8")
+            return False
 
         def _send(self, code, body, ctype="text/html; charset=utf-8"):
             data = body.encode()
@@ -132,9 +148,12 @@ def start(app, port=8099):
             self.wfile.write(data)
 
         def do_GET(self):
+            if not self._allowed():
+                return
             path, _, query = self.path.partition("?")
             if path.endswith("/api/state"):
-                return self._send(200, json.dumps({"last_scan": app.last_scan, **app.state},
+                return self._send(200, json.dumps({"last_scan": app.last_scan,
+                                                  **{k: v for k, v in app.state.items() if k != "jinka_auth"}},
                                                   ensure_ascii=False), "application/json")
             if path.rstrip("/").endswith("explore"):
                 return self._send(200, render_explore(app))
@@ -142,6 +161,8 @@ def start(app, port=8099):
             self._send(200, render(app, flt))
 
         def do_POST(self):
+            if not self._allowed():
+                return
             path = self.path.rstrip("/")
             length = int(self.headers.get("Content-Length") or 0)
             form = {k: v[0] for k, v in parse_qs(self.rfile.read(length).decode()).items()}
@@ -249,10 +270,10 @@ def render_explore(app):
             rows.append(f"<tr><td><b class='{'ok' if r['ok'] else 'ko'}'>{'✅' if r['ok'] else '❌'} "
                         f"{esc(r['nom'])}</b><div class='muted'>{esc(r.get('cp') or '')} · "
                         f"{r['distance_km']} km</div></td>{cells}</tr>")
-        points = json.dumps([{"n": r["nom"], "lat": r["lat"], "lon": r["lon"], "ok": r["ok"],
-                              "t": " · ".join(f"{t['name']} {t['minutes'] if t['minutes'] is not None else '—'} min"
+        points = safe_json([{"n": html.escape(r["nom"]), "lat": r["lat"], "lon": r["lon"], "ok": r["ok"],
+                              "t": html.escape(" · ").join(html.escape(f"{t['name']} {t['minutes'] if t['minutes'] is not None else '—'} min")
                                               for t in r["trips"])} for r in ex["results"]])
-        dpoints = json.dumps([{"n": d["name"], "lat": d["lat"], "lon": d["lon"]} for d in ex["dests"]])
+        dpoints = safe_json([{"n": html.escape(d["name"]), "lat": d["lat"], "lon": d["lon"]} for d in ex["dests"]])
         content = f"""<div class="card"><div id="map"></div></div>
 <div class="card"><b>Communes compatibles</b> <span class="muted">(à recopier dans ton alerte Jinka)</span>
 <textarea rows="4" readonly>{esc(', '.join(ok_names)) or 'aucune'}</textarea></div>

@@ -21,7 +21,6 @@ OPTIONS_PATH = os.environ.get("OPTIONS_PATH", "/data/options.json")
 STATE_PATH = os.environ.get("STATE_PATH", "/data/state.json")
 MAX_DESTINATIONS = 5
 MAX_STATE_ENTRIES = 3000
-DEFAULT_ERROR_EMAIL = ""
 ERROR_EMAIL_EVERY = 6 * 3600  # même type d'erreur : au plus un email toutes les 6 h
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
@@ -333,7 +332,7 @@ class App:
 
     def error_notifier(self):
         o = self.opts
-        to = (o.get("error_email") if o.get("error_email") is not None else DEFAULT_ERROR_EMAIL).strip()
+        to = (o.get("error_email") or "").strip()
         n = Notifier(email_to=to, smtp_user=o.get("mail_user") or o.get("jinka_email"),
                      smtp_password=o.get("mail_password"), smtp_server=o.get("smtp_server"))
         return n if n.email_ok else None
