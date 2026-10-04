@@ -194,9 +194,14 @@ json.dump(OPTIONS, open(os.environ["OPTIONS_PATH"], "w"))
 app.opts = app.load_options()
 n_prim = len(calls["prim"])
 L["ad2"]["crit"] = "old"  # force une réévaluation de ad2 (refusée)
+import copy
+_ad1 = copy.deepcopy(L["ad1"])
 app.scan()
 assert L["ad2"]["reason"] == "loyer 1500 € > 1400 €", L["ad2"]
 assert len(calls["prim"]) == n_prim
+# ad1 (déjà envoyée, 1 500 €) est revérifiée et passe en refusée
+assert L["ad1"]["status"] == "rejected" and L["ad1"]["reason"] == "loyer 1500 € > 1400 € (revérifiée)", L["ad1"]
+L["ad1"].clear(); L["ad1"].update(_ad1)  # on la remet pour les tests suivants
 print("loyer max ✔")
 app.opts["min_area"] = 18
 st_, _, why = app.evaluate({"rent": 700, "area": 15, "lat": 1, "lng": 1}, [], None)
@@ -515,7 +520,11 @@ assert not bienici.is_coliving({"description": "T2 meublé de 30 m², colocation
 assert not bienici.is_coliving({"description": "Appartement F2, une chambre séparée, disponible de suite"})
 app.state["listings"]["p7"]["status"] = "notified"
 app.state["listings"]["p7"]["listing"] = {**app.state["listings"]["p7"]["listing"], "description": "COLOCATION BAUX INDIVIDUELS 1 Chambre disponible"}
-app.recheck_coliving()
+app.state["listings"]["p8"]["status"] = "notified"
+app.state["listings"]["p8"]["listing"] = {**app.state["listings"]["p8"]["listing"], "area": 16}
+app.opts["min_area"] = 20; app.opts["max_rent"] = 0
+app.recheck_retained()
 assert app.state["listings"]["p7"]["status"] == "rejected" and app.state["listings"]["p6"]["status"] == "notified"
+assert app.state["listings"]["p8"]["status"] == "rejected" and "16 m² < 20 m²" in app.state["listings"]["p8"]["reason"]
 assert app.evaluate({**L["ad1"]["listing"], "description": "Une chambre est disponible dans une colocation"}, [], None)[2] == "chambre en colocation"
-print("Colocations (texte + rattrapage) ✔")
+print("Colocations + surface (texte + rattrapage des annonces déjà retenues) ✔")

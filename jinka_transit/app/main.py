@@ -117,16 +117,23 @@ class App:
             out.append({**d, **cache[addr]})
         return out
 
-    def evaluate(self, listing, dests, transit):
+    def basic_reject(self, listing):
+        """Critères simples (sans calcul de trajet) : colocation, loyer, surface. Renvoie la raison ou None."""
         import bienici
         if listing.get("coliving") or bienici.is_coliving({"description": listing.get("description")}):
-            return "rejected", [], "chambre en colocation"
+            return "chambre en colocation"
         max_rent = int(self.opts.get("max_rent") or 0)
         if max_rent and listing.get("rent") and listing["rent"] > max_rent:
-            return "rejected", [], f"loyer {int(listing['rent'])} € > {max_rent} €"
+            return f"loyer {int(listing['rent'])} € > {max_rent} €"
         min_area = int(self.opts.get("min_area") or 0)
         if min_area and listing.get("area") and listing["area"] < min_area:
-            return "rejected", [], f"surface {listing['area']:g} m² < {min_area} m²"
+            return f"surface {listing['area']:g} m² < {min_area} m²"
+        return None
+
+    def evaluate(self, listing, dests, transit):
+        reason = self.basic_reject(listing)
+        if reason:
+            return "rejected", [], reason
         home_walk_max = int(self.opts.get("max_walk_home_minutes", 5))
         if listing["lat"] is None or listing["lng"] is None:
             import locate
@@ -168,7 +175,7 @@ class App:
         dests = self.resolve_destinations(transit)
         crit = self.criteria_hash()
 
-        self.recheck_coliving()
+        self.recheck_retained()
         done = {k for k, v in self.state["listings"].items()
                 if v["status"] in ("notified", "silent") or v.get("crit") == crit}
         done |= set(self.state.get("forgotten", {}))
@@ -390,18 +397,19 @@ class App:
         except Exception:  # noqa: BLE001
             log.exception("Impossible d'envoyer l'email de rétablissement")
 
-    def recheck_coliving(self):
-        """Annonces déjà retenues qui s'avèrent être des chambres en colocation (filtre ajouté ou amélioré
-        après coup) : passées en « refusées »."""
-        import bienici
+    def recheck_retained(self):
+        """Annonces déjà retenues (même déjà envoyées) qui ne passent plus les critères simples — filtre
+        ajouté ou durci après coup (colocation, loyer, surface) : passées en « refusées »."""
         n = 0
         for v in self.state["listings"].values():
-            if v["status"] in ("match", "notified", "silent") and bienici.is_coliving(
-                    {"description": v["listing"].get("description")}):
-                v["status"], v["reason"], v["results"] = "rejected", "chambre en colocation (détectée après coup)", []
-                n += 1
+            if v["status"] in ("match", "notified", "silent"):
+                reason = self.basic_reject(v["listing"])
+                if reason:
+                    v["status"], v["reason"], v["results"] = "rejected", f"{reason} (revérifiée)", []
+                    v["crit"] = self.criteria_hash()
+                    n += 1
         if n:
-            log.info("%d annonce(s) retenue(s) auparavant écartée(s) : chambre en colocation.", n)
+            log.info("%d annonce(s) retenue(s) auparavant écartée(s) après revérification des critères.", n)
             self.save_state()
 
     def find_twin(self, listing):
