@@ -62,7 +62,7 @@ class App:
         o = self.opts
         key = json.dumps([o["destinations"], sorted(o.get("allowed_modes") or []),
                           o.get("max_walk_minutes"), o.get("max_rent", 0), o.get("max_walk_home_minutes", 5),
-                          "localisation-v2"],
+                          "localisation-v2", o.get("min_area", 0)],
                          sort_keys=True)
         return hashlib.sha1(key.encode()).hexdigest()[:12]
 
@@ -105,6 +105,9 @@ class App:
         max_rent = int(self.opts.get("max_rent") or 0)
         if max_rent and listing.get("rent") and listing["rent"] > max_rent:
             return "rejected", [], f"loyer {int(listing['rent'])} € > {max_rent} €"
+        min_area = int(self.opts.get("min_area") or 0)
+        if min_area and listing.get("area") and listing["area"] < min_area:
+            return "rejected", [], f"surface {listing['area']:g} m² < {min_area} m²"
         home_walk_max = int(self.opts.get("max_walk_home_minutes", 5))
         if listing["lat"] is None or listing["lng"] is None:
             import locate

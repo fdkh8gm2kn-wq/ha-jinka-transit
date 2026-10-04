@@ -198,6 +198,12 @@ app.scan()
 assert L["ad2"]["reason"] == "loyer 1500 € > 1400 €", L["ad2"]
 assert len(calls["prim"]) == n_prim
 print("loyer max ✔")
+app.opts["min_area"] = 18
+st_, _, why = app.evaluate({"rent": 700, "area": 15, "lat": 1, "lng": 1}, [], None)
+assert st_ == "rejected" and why == "surface 15 m² < 18 m²", why
+assert app.evaluate({"rent": 700, "area": None, "lat": 1, "lng": 1}, [], None)[0] == "match"  # surface inconnue : gardée
+app.opts["min_area"] = 0
+print("surface minimum ✔")
 
 # Plus de 5 adresses -> tronqué à 5
 OPTIONS["destinations"] = [{"name": f"A{i}", "address": "48.8,2.3", "max_minutes": 45, "arrival_time": "09:00"}

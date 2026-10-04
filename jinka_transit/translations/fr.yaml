@@ -33,6 +33,9 @@ configuration:
   allowed_modes:
     name: Modes autorisés
     description: Le bus est toujours exclu.
+  min_area:
+    name: Surface minimum (m²)
+    description: 0 = pas de minimum. Les annonces sans surface indiquée sont gardées.
   max_rent:
     name: Loyer max (€, charges comprises selon l'annonce)
     description: 0 = pas de limite. Vérifié avant le calcul des trajets.
