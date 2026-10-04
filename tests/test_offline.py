@@ -230,6 +230,16 @@ assert "Paris 15e (75015)" in page and "1 communes compatibles" in page
 long_walk = Transit("k", ["metro"], 15).check_journey({"duration": 44 * 60, "sections": [walk(44 * 60)]})
 short_walk = Transit("k", ["metro"], 15).check_journey({"duration": 11 * 60, "sections": [walk(11 * 60)]})
 assert not long_walk["valid"] and short_walk["valid"] and short_walk["summary"] == "à pied"
+# Seuil propre à la recherche élargie + trajets réutilisés d'une recherche à l'autre
+cache = {}
+t1 = Transit("k", ["metro", "rer"])
+r1 = explore.run(t1, dests, 15, {}, max_minutes=20, cache=cache, pause=0)
+assert {r["nom"]: r["ok"] for r in r1["results"]} == {"Paris 15e": False, "Vincennes": False}  # 25 min > 20
+t2 = Transit("k", ["metro", "rer"])
+r2 = explore.run(t2, dests, 15, {}, max_minutes=75, cache=cache, pause=0)
+assert {r["nom"]: r["ok"] for r in r2["results"]} == {"Paris 15e": True, "Vincennes": False}
+assert r2["dests"][0]["max"] == 75
+print("recherche élargie : seuil 75 min, réutilisation des trajets :", t2.api_calls, "nouvel(s) appel(s) ✔")
 print("recherche élargie ✔")
 # Lecture du code dans un email Jinka
 import mailbox  # noqa: E402

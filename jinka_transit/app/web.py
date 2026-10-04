@@ -163,7 +163,8 @@ def start(app, port=8099):
                     app.flash = f"<span class='ko'>{html.escape(str(e))}</span>"
             elif path.endswith("explore/start"):
                 try:
-                    app.explore_start(max(3, min(40, int(form.get("radius") or 15))))
+                    app.explore_start(max(3, min(40, int(form.get("radius") or 15))),
+                                      max(10, min(180, int(form.get("max_minutes") or 45))))
                 except Exception as e:  # noqa: BLE001
                     app.explore_progress = {"error": str(e)}
             redirect = "../" if "/jinka/" in self.path else "../explore" if "/explore/" in self.path else "./"
@@ -197,8 +198,9 @@ background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:
 <h1>Zones compatibles</h1>
 <div class="muted">Communes d'où ${dests} sont joignables sans bus, depuis le centre de la commune
 (marche jusqu'à la station comprise). À utiliser pour régler le secteur de tes alertes Jinka.</div>
-<div class="card"><form method="post" action="explore/start">Rayon autour de tes adresses :
-<input type="number" name="radius" value="${radius}" min="3" max="40"> km
+<div class="card"><form method="post" action="explore/start">Temps max vers chaque adresse :
+<input type="number" name="max_minutes" value="${max_minutes}" min="10" max="180"> min ·
+rayon autour de tes adresses : <input type="number" name="radius" value="${radius}" min="3" max="40"> km
 <button>${button}</button></form><div style="margin-top:8px">${status}</div></div>
 ${content}
 </main></body></html>""")
@@ -207,7 +209,8 @@ ${content}
 def render_explore(app):
     esc = html.escape
     filt = [d for d in app.opts["destinations"] if not d["info_only"]]
-    dests = " et ".join(f"<b>{esc(d['name'])}</b> (≤ {d['max_minutes']} min)" for d in filt) or "tes adresses"
+    ex_max = (app.state.get("explore") or {}).get("max_minutes")
+    dests = " et ".join(f"<b>{esc(d['name'])}</b> (≤ {ex_max or d['max_minutes']} min)" for d in filt) or "tes adresses"
     prog = app.explore_progress
     ex = app.state.get("explore")
     if prog.get("running"):
@@ -219,7 +222,8 @@ def render_explore(app):
         n_ok = sum(r["ok"] for r in ex["results"])
         status = (f"Dernier calcul le {datetime.fromtimestamp(ex['at']).strftime('%d/%m %H:%M')} : "
                   f"<b class='ok'>{n_ok} communes compatibles</b> sur {len(ex['results'])} "
-                  f"(rayon {ex['radius_km']} km, {ex.get('api_calls', 0)} appels IDFM).")
+                  f"(seuil {ex.get('max_minutes') or 'des adresses'} min, rayon {ex['radius_km']} km, "
+                  f"{ex.get('api_calls', 0)} appels IDFM, {ex.get('cache_hits', 0)} trajets déjà connus).")
     else:
         status = "Pas encore lancé (compter 2 à 5 minutes)."
     content = ""
@@ -253,5 +257,7 @@ pts.forEach(p=>{{b.push([p.lat,p.lon]);L.circleMarker([p.lat,p.lon],{{radius:p.o
 dpts.forEach(d=>L.marker([d.lat,d.lon]).bindTooltip(d.n,{{permanent:true}}).addTo(map));
 map.fitBounds(b.length?b:dpts.map(d=>[d.lat,d.lon]));
 </script>"""
+    default_max = max([d["max_minutes"] for d in filt] or [45])
     return EXPLORE.substitute(dests=dests, radius=(ex or {}).get("radius_km", 15),
+                              max_minutes=(ex or {}).get("max_minutes") or default_max,
                               button="Relancer" if ex else "Lancer la recherche", status=status, content=content)

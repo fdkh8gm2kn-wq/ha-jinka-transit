@@ -77,7 +77,8 @@ class App:
             keep = sorted(items.items(), key=lambda kv: kv[1].get("ts", 0), reverse=True)
             self.state["listings"] = dict(keep[:MAX_STATE_ENTRIES])
         cutoff = time.time() - CACHE_TTL
-        self.state["journeys"] = {k: v for k, v in self.state.get("journeys", {}).items() if v["ts"] > cutoff}
+        for key in ("journeys", "explore_cache"):
+            self.state[key] = {k: v for k, v in self.state.get(key, {}).items() if v["ts"] > cutoff}
         tmp = STATE_PATH + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(self.state, f, ensure_ascii=False)
@@ -240,7 +241,7 @@ class App:
 
     # ---------- recherche élargie (communes compatibles) ----------
 
-    def explore_start(self, radius_km):
+    def explore_start(self, radius_km, max_minutes=None):
         if self.explore_progress.get("running"):
             return
         o = self.opts
@@ -249,18 +250,20 @@ class App:
         if not [d for d in o["destinations"] if not d["info_only"]]:
             raise RuntimeError("Aucune adresse de filtre configurée.")
         self.explore_progress = {"running": True, "done": 0, "total": 0, "error": None}
-        threading.Thread(target=self._explore, args=(radius_km,), daemon=True).start()
+        threading.Thread(target=self._explore, args=(radius_km, max_minutes), daemon=True).start()
 
-    def _explore(self, radius_km):
+    def _explore(self, radius_km, max_minutes=None):
         import explore
         try:
             transit = Transit(self.opts["prim_api_key"], self.opts.get("allowed_modes"),
                               self.opts.get("max_walk_minutes", 15))
             with self.lock:
                 dests = self.resolve_destinations(transit)
-            result = explore.run(transit, dests, radius_km, self.explore_progress)
+            cache = dict(self.state.get("explore_cache", {}))  # copie : le scan peut sauver en parallèle
+            result = explore.run(transit, dests, radius_km, self.explore_progress, max_minutes, cache)
             with self.lock:
                 self.state["explore"] = result
+                self.state["explore_cache"] = cache
                 self.save_state()
             ok = sum(r["ok"] for r in result["results"])
             log.info("Recherche élargie terminée : %d communes compatibles sur %d.", ok, len(result["results"]))
