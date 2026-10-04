@@ -36,7 +36,7 @@ border:1px solid var(--line);background:var(--bg);color:var(--fg);min-width:0;fl
 <a href="explore">🗺️ Zones compatibles (recherche élargie)</a></div>
 ${flash}<div class="card"><b>Connexion Jinka :</b> ${jinka_status}
 <form method="post" action="jinka/send" class="row"><input type="email" name="email" value="${jinka_email}"
- placeholder="ton email Jinka" required><button>Recevoir un code</button></form>${code_form}</div>
+ placeholder="ton email Jinka" required><button>Recevoir un code</button></form>${code_form}${auto_form}</div>
 <div class="card"><b>Dernier scan :</b> ${last_at} — ${last_status}${last_error}
 <form method="post" action="scan" style="display:inline;margin-left:12px"><button>Scanner maintenant</button></form></div>
 <div class="card"><b>Adresses</b><table><tr><th>Nom</th><th>Adresse saisie</th><th>Localisée à</th><th>Max</th><th>Arrivée</th></tr>${dests}</table>
@@ -96,9 +96,16 @@ def render(app, flt):
                  f"pattern='[0-9]{{4}}' maxlength='4' placeholder='code à 4 chiffres reçu sur "
                  f"{esc(app.login_email)}' required autofocus><button>Valider</button></form>")
     flash, app.flash = app.flash, ""
+    if app.auto_test_running:
+        flash = ("⏳ Connexion automatique en cours : code demandé à Jinka, lecture de la boîte mail…"
+                 "<script>setTimeout(()=>location.reload(),5000)</script>")
     return PAGE.substitute(
         flash=f"<div class='flash'>{flash}</div>" if flash else "",
         jinka_status=jinka_status, code_form=code_form,
+        auto_form=("" if not (app.opts.get("jinka_email") and app.opts.get("mail_password")) else
+                   "<form method='post' action='jinka/auto' class='row'><button>🔄 Tester la connexion automatique"
+                   f" ({esc(app.opts['jinka_email'])})</button><span class='muted'>demande un code, le lit dans "
+                   "la boîte mail et se connecte (≈ 30 s)</span></form>"),
         jinka_email=esc(app.login_email or auth.get("email") or app.opts.get("jinka_email") or ""),
         last_at=esc(last["at"] or "—"), last_status=esc(last["status"]),
         last_error=f" <span class='ko'>{esc(last['error'])}</span>" if last.get("error") else "",
@@ -141,6 +148,11 @@ def start(app, port=8099):
                 try:
                     app.jinka_send_code(form.get("email", ""))
                     app.flash = "📧 Code envoyé : regarde tes emails et saisis-le ci-dessous."
+                except Exception as e:  # noqa: BLE001
+                    app.flash = f"<span class='ko'>{html.escape(str(e))}</span>"
+            elif path.endswith("jinka/auto"):
+                try:
+                    app.auto_login_now()
                 except Exception as e:  # noqa: BLE001
                     app.flash = f"<span class='ko'>{html.escape(str(e))}</span>"
             elif path.endswith("jinka/verify"):

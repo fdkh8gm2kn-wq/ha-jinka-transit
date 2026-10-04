@@ -46,7 +46,14 @@ def wait_for_code(host, user, password, since_ts, timeout=240, poll=10):
         time.sleep(poll)
 
 
+def clean_password(host, password):
+    """Les clés d'application Google s'affichent en 4 groupes séparés par des espaces."""
+    password = (password or "").strip()
+    return password.replace(" ", "") if "gmail" in host or "google" in host else password
+
+
 def find_code(host, user, password, since_ts):
+    password = clean_password(host, password)
     try:
         imap = imaplib.IMAP4_SSL(host, 993, timeout=30)
     except OSError as e:
@@ -54,9 +61,10 @@ def find_code(host, user, password, since_ts):
     try:
         try:
             imap.login(user, password)
-        except imaplib.IMAP4.error:
-            raise JinkaAuthError(f"Connexion à la boîte mail {user} refusée : vérifie le mot de passe "
-                                 "(mot de passe d'application pour Gmail).") from None
+        except imaplib.IMAP4.error as e:
+            detail = e.args[0].decode(errors="replace") if e.args and isinstance(e.args[0], bytes) else str(e)
+            raise JinkaAuthError(f"Connexion à la boîte mail {user} refusée par {host} ({detail}). Vérifie la "
+                                 "clé d'application Google (16 lettres).") from None
         for folder in folders(imap):
             if imap.select(folder, readonly=True)[0] != "OK":
                 continue

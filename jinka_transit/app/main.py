@@ -36,6 +36,7 @@ class App:
         self.login_email = ""
         self.flash = ""            # message affiché une fois dans la page
         self.explore_progress = {}  # recherche élargie en cours
+        self.auto_test_running = False
 
     # ---------- config / état ----------
 
@@ -127,7 +128,8 @@ class App:
             raise RuntimeError("prim_api_key manquante (clé gratuite sur prim.iledefrance-mobilites.fr).")
 
         token = o.get("jinka_token") or (self.state.get("jinka_auth") or {}).get("token")
-        jinka = Jinka(o.get("jinka_email"), o.get("jinka_password"), token)
+        password = "" if o.get("mail_password") else o.get("jinka_password")
+        jinka = Jinka(o.get("jinka_email"), password, token)
         transit = Transit(o["prim_api_key"], o.get("allowed_modes"), o.get("max_walk_minutes", 15))
         notifier = Notifier(o.get("whatsapp_phone"), o.get("whatsapp_callmebot_apikey"),
                             o.get("ha_notify_service"))
@@ -270,10 +272,34 @@ class App:
 
     # ---------- reconnexion automatique (code lu dans la boîte mail dédiée) ----------
 
-    def auto_login_possible(self):
+    def auto_login_possible(self, force=False):
         o = self.opts
         return bool(o.get("jinka_email") and o.get("mail_password") and not o.get("jinka_token")
-                    and time.time() - self.state.get("auto_login_at", 0) > 20 * 60)
+                    and (force or time.time() - self.state.get("auto_login_at", 0) > 20 * 60))
+
+    def auto_login_now(self):
+        """Bouton « Tester la connexion automatique » : sans attendre le délai de 20 min."""
+        self.opts = self.load_options()
+        if not self.auto_login_possible(force=True):
+            raise JinkaAuthError("Renseigne d'abord « Email Jinka » et la clé d'application Google dans la configuration.")
+        if self.auto_test_running:
+            return
+
+        def run():
+            self.auto_test_running = True
+            try:
+                with self.lock:
+                    self.auto_login()
+                self.flash = "<span class='ok'>✅ Connexion automatique réussie : code lu dans la boîte mail. Scan lancé.</span>"
+                self.scan_now.set()
+            except Exception as e:  # noqa: BLE001
+                log.error("Test de connexion automatique échoué : %s", e)
+                import html
+                self.flash = f"<span class='ko'>❌ {html.escape(str(e))}</span>"
+            finally:
+                self.auto_test_running = False
+
+        threading.Thread(target=run, daemon=True).start()
 
     def auto_login(self):
         """Demande un code à Jinka, le lit dans la boîte mail et se connecte. Une tentative / 20 min."""
