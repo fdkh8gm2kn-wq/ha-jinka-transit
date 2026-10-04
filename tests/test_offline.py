@@ -209,6 +209,9 @@ assert len(app.load_options()["destinations"]) == 5
 import web  # noqa: E402
 html = web.render(app, "all")
 assert "Vincennes" in html and "refusée" in html
+import jinka  # noqa: E402
+assert jinka.ad_link({"uuid": "abc-123"}, "f00") == "https://www.jinka.fr/ad/abc-123?alert_id=f00"
+assert jinka.ad_link({}, "f00") == "https://www.jinka.fr/alerts/f00"
 
 # Recherche élargie : Paris 15e (lat 1 -> métro OK), Vincennes (lat 2 -> seulement bus), « Loin » hors rayon
 import explore  # noqa: E402

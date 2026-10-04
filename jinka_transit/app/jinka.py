@@ -127,6 +127,16 @@ def normalize(ad, alert_id, alert_name):
         "expired": bool(ad.get("expired_at")),
         "deleted": bool(ad.get("deleted_at") or ad.get("deleted")),
         "image": images[0] if images and isinstance(images[0], str) else None,
-        "link": ad.get("webview_link")
-        or f"https://api.jinka.fr/alert_result_view_ad?ad={ad_id}&alert_token={alert_id}",
+        "link": ad_link(ad, alert_id),
+        "quartier": ad.get("quartier_name"),
     }
+
+
+def ad_link(ad, alert_id):
+    """Lien vers la fiche de l'annonce sur jinka.fr (même format que le site : /ad/<uuid>)."""
+    uuid = ad.get("uuid")
+    if uuid:
+        return f"https://www.jinka.fr/ad/{uuid}?alert_id={alert_id}"
+    if ad.get("webview_link"):
+        return ad["webview_link"]
+    return f"https://www.jinka.fr/alerts/{alert_id}"
