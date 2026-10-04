@@ -550,3 +550,24 @@ app.recheck_retained()
 assert app.state["listings"]["p9"]["status"] == "rejected" and "44 min + 6 min" in app.state["listings"]["p9"]["reason"]
 assert app.state["listings"]["p9"]["crit"] is None  # sera recalculée si elle réapparaît
 print("Correspondances (max 2, +3 min chacune) ✔")
+# Recherche élargie bloquée par le quota : relance la nuit suivante, résultat par email
+import explore as _ex
+_run = _ex.run
+def _quota(*a, **k): raise main.HttpError(429, "https://prim/x", '{"message":"API rate limit exceeded"}')
+_ex.run = _quota
+app.opts.update({"prim_api_key": "k", "daily_report_email": "rapport@example.org"})
+app.resolve_destinations = lambda t: []
+app._explore(25, 75)
+assert app.state["explore_retry"]["max_minutes"] == 75 and "cette nuit" in app.explore_progress["error"]
+assert not app.explore_retry_due() and app.explore_retry_due(_dt(2099, 1, 1))
+_ex.run = lambda *a, **k: {"radius_km": 25, "max_minutes": 75, "results": [
+    {"nom": "Montrouge", "ok": True, "worst": 41}, {"nom": "Vanves", "ok": True, "worst": 50},
+    {"nom": "Loin", "ok": False, "worst": 90}]}
+sent_mail.clear()
+app.state.pop("explore_retry")
+app._explore(25, 75, from_retry=True)
+m = [x[1] for x in sent_mail if x[0] == "msg"][-1]
+body = m.get_content()
+assert "Montrouge (41)" in body and "Vanves (50)" in body and "Loin" not in body and "explore_retry" not in app.state
+_ex.run = _run
+print("Recherche élargie relancée la nuit après quota ✔")

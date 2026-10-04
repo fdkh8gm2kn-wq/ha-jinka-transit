@@ -515,25 +515,60 @@ class App:
         self.explore_progress = {"running": True, "done": 0, "total": 0, "error": None}
         threading.Thread(target=self._explore, args=(radius_km, max_minutes), daemon=True).start()
 
-    def _explore(self, radius_km, max_minutes=None):
+    def _explore(self, radius_km, max_minutes=None, from_retry=False):
         import explore
         try:
             transit = self.make_transit()
             with self.lock:
                 dests = self.resolve_destinations(transit)
             cache = dict(self.state.get("explore_cache", {}))  # copie : le scan peut sauver en parallèle
-            result = explore.run(transit, dests, radius_km, self.explore_progress, max_minutes, cache)
+            try:
+                result = explore.run(transit, dests, radius_km, self.explore_progress, max_minutes, cache)
+            finally:
+                with self.lock:  # trajets déjà calculés gardés même en cas d'échec (quota…)
+                    self.state["explore_cache"] = cache
+                    self.save_state()
             with self.lock:
                 self.state["explore"] = result
-                self.state["explore_cache"] = cache
+                self.state.pop("explore_retry", None)
                 self.save_state()
             ok = sum(r["ok"] for r in result["results"])
             log.info("Recherche élargie terminée : %d communes compatibles sur %d.", ok, len(result["results"]))
+            if from_retry:
+                self.send_explore_report(result)
         except Exception as e:  # noqa: BLE001
             log.error("Recherche élargie échouée : %s", e)
             self.explore_progress["error"] = str(e)
+            if isinstance(e, (HttpError, TransitError)) and "429" in str(e):
+                with self.lock:
+                    self.state["explore_retry"] = {"radius_km": radius_km, "max_minutes": max_minutes,
+                                                   "day": datetime.now().strftime("%Y-%m-%d")}
+                    self.save_state()
+                self.explore_progress["error"] = ("Quota IDFM du jour atteint : la recherche sera relancée "
+                                                  "automatiquement cette nuit, résultat envoyé par email.")
         finally:
             self.explore_progress["running"] = False
+
+    def explore_retry_due(self, now=None):
+        r = self.state.get("explore_retry")
+        return bool(r) and (now or datetime.now()).strftime("%Y-%m-%d") != r["day"]
+
+    def send_explore_report(self, result):
+        """Email du résultat d'une recherche élargie relancée la nuit : communes par tranche de temps compté."""
+        o = self.opts
+        n = Notifier(email_to=o.get("daily_report_email") or o.get("error_email"),
+                     smtp_user=o.get("mail_user") or o.get("jinka_email"),
+                     smtp_password=o.get("mail_password"), smtp_server=o.get("smtp_server"))
+        if not n.email_ok:
+            return
+        bands = [("≤ 45 min", 0, 45), ("45 à 50 min", 46, 49), ("50 à 60 min", 50, 60), ("60 à 75 min", 61, 75)]
+        lines = [f"Recherche élargie (rayon {result['radius_km']} km, max {result['max_minutes']} min, "
+                 "correspondances comptées) — pire des deux trajets, depuis le centre de la commune :", ""]
+        for label, lo, hi in bands:
+            names = [f"{r['nom']} ({r['worst']})" for r in result["results"]
+                     if r["ok"] and r["worst"] is not None and lo <= r["worst"] <= hi]
+            lines += [f"{label} — {len(names)} communes :", ", ".join(names) or "—", ""]
+        n._email("🗺️ Jinka Transit : recherche élargie terminée", "\n".join(lines))
 
     # ---------- reconnexion automatique (code lu dans la boîte mail dédiée) ----------
 
@@ -637,6 +672,12 @@ class App:
         while True:
             self.opts = self.load_options()
             quiet = self.quiet_seconds_left()
+            if quiet and not manual and self.explore_retry_due() and not self.explore_progress.get("running"):
+                r = self.state.pop("explore_retry")  # remis par _explore si le quota est encore atteint
+                log.info("Pause nocturne : relance de la recherche élargie (quota IDFM renouvelé).")
+                self.explore_progress = {"running": True, "done": 0, "total": 0, "error": None}
+                self._explore(r["radius_km"], r["max_minutes"], from_retry=True)
+                continue
             if quiet and not manual:
                 log.info("Pause nocturne (%s) : reprise des scans dans %d min.",
                          self.opts.get("quiet_hours"), quiet // 60 + 1)
