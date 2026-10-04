@@ -449,17 +449,17 @@ class App:
         log.info("Connexion automatique à Jinka réussie.")
         return token
 
-    def quiet_seconds_left(self, now=None):
-        """Secondes restantes de la pause nocturne (0 si on est hors pause). Format "HH:MM-HH:MM", vide = pas de pause."""
-        spec = (self.opts.get("quiet_hours") or "").strip()
+    @staticmethod
+    def window_left(spec, now):
+        """Secondes restantes dans la plage "HH:MM-HH:MM" (0 si on est en dehors ou si la plage est vide/invalide)."""
+        spec = (spec or "").strip()
         if not spec:
             return 0
         try:
             start, end = [datetime.strptime(x.strip(), "%H:%M").time() for x in spec.split("-")]
         except ValueError:
-            log.warning("Pause nocturne invalide : %r (attendu par ex. 00:00-07:00)", spec)
+            log.warning("Plage horaire invalide : %r (attendu par ex. 00:00-07:00)", spec)
             return 0
-        now = now or datetime.now()
         t = now.time()
         inside = start <= t < end if start <= end else (t >= start or t < end)
         if not inside:
@@ -468,6 +468,30 @@ class App:
         if end_dt <= now:
             end_dt += timedelta(days=1)
         return int((end_dt - now).total_seconds())
+
+    def quiet_seconds_left(self, now=None):
+        """Secondes restantes de la pause nocturne (0 hors pause)."""
+        return self.window_left(self.opts.get("quiet_hours"), now or datetime.now())
+
+    def scan_interval(self, now=None):
+        """Intervalle (s) jusqu'au prochain scan : court en journée (peak_hours), normal sinon."""
+        now = now or datetime.now()
+        normal = max(5, int(self.opts.get("scan_interval_minutes", 15))) * 60
+        peak_left = self.window_left(self.opts.get("peak_hours"), now)
+        if peak_left:
+            return min(max(5, int(self.opts.get("peak_interval_minutes") or 5)) * 60, normal)
+        # on ne déborde pas sur le début de la plage de journée ni de la nuit
+        nxt = [normal]
+        for spec in (self.opts.get("peak_hours"), self.opts.get("quiet_hours")):
+            try:
+                start = datetime.strptime((spec or "").split("-")[0].strip(), "%H:%M")
+            except ValueError:
+                continue
+            start_dt = now.replace(hour=start.hour, minute=start.minute, second=0, microsecond=0)
+            if start_dt <= now:
+                start_dt += timedelta(days=1)
+            nxt.append(max(60, int((start_dt - now).total_seconds())))
+        return min(nxt)
 
     def loop(self):
         manual = False
@@ -481,8 +505,7 @@ class App:
                 self.scan_now.clear()
                 continue
             self.run_once()
-            interval = max(5, int(self.opts.get("scan_interval_minutes", 15))) * 60
-            manual = self.scan_now.wait(interval)
+            manual = self.scan_now.wait(self.scan_interval())
             self.scan_now.clear()
 
 

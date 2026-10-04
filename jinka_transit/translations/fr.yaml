@@ -87,8 +87,13 @@ configuration:
     description: >-
       Plage horaire sans scan, format HH:MM-HH:MM (ex. 00:00-07:00). Vide = scans jour et nuit.
       Le bouton « Scanner maintenant » marche quand même.
+  peak_hours:
+    name: Heures de scan rapproché
+    description: Plage HH:MM-HH:MM où l'on scanne plus souvent (ex. 08:00-19:00). Vide = intervalle normal toute la journée.
+  peak_interval_minutes:
+    name: Intervalle pendant ces heures (min)
   scan_interval_minutes:
-    name: Fréquence des scans (min)
+    name: Fréquence des scans hors heures rapprochées (min)
   max_pages_per_alert:
     name: Pages lues par alerte
   max_notifications_per_run:
