@@ -421,4 +421,29 @@ twin = app.find_twin(got[0])
 assert twin and twin["listing"]["id"] == "ad1"
 assert app.find_twin(got[1]) is None
 print("Bien'ici + doublons ✔")
+
+# Emails d'erreur : un seul par période, puis « rétabli »
+sent_mail.clear()
+app.opts["error_email"] = "admin@example.org"
+app.opts["mail_password"] = app.opts.get("mail_password") or "x"
+app.opts["jinka_email"] = app.opts.get("jinka_email") or "bot@gmail.com"
+_scan = app.scan
+def boom(): raise RuntimeError("panne test")
+app.scan = boom
+app.load_options = lambda: app.opts
+app.run_once(); app.run_once()
+msgs = [m[1] for m in sent_mail if m[0] == "msg"]
+assert len(msgs) == 1 and msgs[0]["To"] == "admin@example.org" and "panne test" in msgs[0].get_content(), msgs
+app.scan = lambda: {"annonces": 0}
+app.run_once()
+msgs = [m[1] for m in sent_mail if m[0] == "msg"]
+assert len(msgs) == 2 and "rétabli" in msgs[1]["Subject"]
+app.run_once()
+assert len([m for m in sent_mail if m[0] == "msg"]) == 2
+app.opts["error_email"] = ""
+app.state["errors_reported"] = {}
+app.scan = boom; app.run_once()
+assert len([m for m in sent_mail if m[0] == "msg"]) == 2  # vide = désactivé
+app.scan = _scan
+print("Emails d'erreur ✔")
 print("\nTous les tests passent ✔")

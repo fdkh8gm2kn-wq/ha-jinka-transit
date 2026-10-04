@@ -20,6 +20,8 @@ OPTIONS_PATH = os.environ.get("OPTIONS_PATH", "/data/options.json")
 STATE_PATH = os.environ.get("STATE_PATH", "/data/state.json")
 MAX_DESTINATIONS = 5
 MAX_STATE_ENTRIES = 3000
+DEFAULT_ERROR_EMAIL = ""
+ERROR_EMAIL_EVERY = 6 * 3600  # même type d'erreur : au plus un email toutes les 6 h
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
                     datefmt="%Y-%m-%d %H:%M:%S")
@@ -63,7 +65,7 @@ class App:
         o = self.opts
         key = json.dumps([o["destinations"], sorted(o.get("allowed_modes") or []),
                           o.get("max_walk_minutes"), o.get("max_rent", 0), o.get("max_walk_home_minutes", 5),
-                          "localisation-v2", o.get("min_area", 0)],
+                          "localisation-v2", "marche-destination-30", o.get("min_area", 0)],
                          sort_keys=True)
         return hashlib.sha1(key.encode()).hexdigest()[:12]
 
@@ -183,6 +185,7 @@ class App:
                 listings += bi
             except (HttpError, OSError, ValueError) as e:
                 log.warning("Bien'ici indisponible (%s) : on continue avec Jinka seul.", e)
+                self.report_error("bienici", f"Bien'ici indisponible : {e}")
 
         stats = {"annonces": len(listings), "évaluées": 0, "ok": 0, "refusées": 0, "doublons": 0}
         known = self.state["listings"]
@@ -205,6 +208,7 @@ class App:
                 status, results, reason = self.evaluate(l, dests, transit)
             except TransitError as e:
                 log.error("Calcul d'itinéraire impossible (%s) : on réessaiera au prochain scan.", e)
+                self.report_error("itinéraires", f"Calcul d'itinéraire impossible (API IDFM) : {e}")
                 break
             stats["évaluées"] += 1
             stats["ok" if status == "match" else "refusées"] += 1
@@ -229,6 +233,9 @@ class App:
                 v["status"] = "notified"
                 v["notified_at"] = time.time()
                 sent += 1
+            else:
+                self.report_error("notification", f"Échec d'envoi de l'annonce {v['listing']['link']} "
+                                  "(email et SMS en échec, voir le journal de l'add-on).")
         if len(pending) > limit:
             log.info("%d annonces en attente, envoyées aux prochains scans.", len(pending) - limit)
         self.state["first_run_done"] = True
@@ -247,6 +254,7 @@ class App:
                 self.last_scan = {"at": started.isoformat(timespec="seconds"), "error": None,
                                   "status": ", ".join(f"{k} : {v}" for k, v in stats.items())}
                 log.info("Scan terminé — %s", self.last_scan["status"])
+                self.report_recovery()
             except Exception as e:  # noqa: BLE001 - on veut que la boucle survive
                 if isinstance(e, (RuntimeError, JinkaAuthError, TransitError, ValueError)):
                     log.error("Scan échoué : %s", e)
@@ -254,6 +262,49 @@ class App:
                     log.exception("Scan échoué : %s", e)
                 self.last_scan = {"at": started.isoformat(timespec="seconds"), "error": str(e),
                                   "status": "erreur"}
+                self.report_error("scan", f"Le scan a échoué : {type(e).__name__} : {e}")
+
+    # ---------- alertes d'erreur par email ----------
+
+    def error_notifier(self):
+        o = self.opts
+        to = (o.get("error_email") if o.get("error_email") is not None else DEFAULT_ERROR_EMAIL).strip()
+        n = Notifier(email_to=to, smtp_user=o.get("mail_user") or o.get("jinka_email"),
+                     smtp_password=o.get("mail_password"), smtp_server=o.get("smtp_server"))
+        return n if n.email_ok else None
+
+    def report_error(self, kind, message):
+        """Envoie l'erreur par email (au plus une fois toutes les 6 h pour la même erreur)."""
+        try:
+            errors = self.state.setdefault("errors_reported", {})
+            prev = errors.get(kind)
+            if prev and time.time() - prev["ts"] < ERROR_EMAIL_EVERY:
+                return
+            n = self.error_notifier()
+            if not n:
+                return
+            text = (f"{message}\n\nType : {kind}\nDate : {datetime.now():%d/%m/%Y %H:%M}\n"
+                    "Un email de rétablissement sera envoyé quand tout refonctionnera.")
+            if n._email(f"⚠️ Jinka Transit : erreur ({kind})", text):
+                errors[kind] = {"message": message, "ts": time.time()}
+                self.save_state()
+        except Exception:  # noqa: BLE001 - l'alerte ne doit jamais casser le scan
+            log.exception("Impossible d'envoyer l'email d'erreur")
+
+    def report_recovery(self):
+        """Scan réussi : si des erreurs avaient été signalées, on prévient que c'est rétabli."""
+        errors = self.state.get("errors_reported") or {}
+        if "scan" not in errors:
+            return
+        try:
+            n = self.error_notifier()
+            if n and n._email("✅ Jinka Transit : rétabli",
+                              f"Le scan refonctionne ({self.last_scan['status']}).\n"
+                              f"Dernière erreur : {errors['scan']['message']}"):
+                errors.pop("scan")
+                self.save_state()
+        except Exception:  # noqa: BLE001
+            log.exception("Impossible d'envoyer l'email de rétablissement")
 
     def find_twin(self, listing):
         """Même logement déjà vu sur une autre source (Jinka ↔ Bien'ici) ?"""

@@ -51,12 +51,20 @@ configuration:
     name: Marche max logement → station (min)
     description: Une annonce n'est retenue que si une station de métro/RER/tram est à moins de ce temps à pied du logement.
   max_walk_minutes:
-    name: Marche max jusqu'à une station (min)
+    name: Trajet tout à pied accepté jusqu'à (min)
+    description: >-
+      Si la destination est à moins de ce temps à pied, le trajet sans transport est accepté. La marche finale
+      station → destination n'est pas limitée (seule la durée totale compte).
   email_to:
     name: Envoyer les annonces par email à
     description: >-
       Ton adresse (plusieurs possibles, séparées par des virgules). L'email part de la boîte Gmail dédiée,
       avec la même clé d'application Google : rien d'autre à configurer.
+  error_email:
+    name: Envoyer les erreurs par email à
+    description: >-
+      En cas de panne (connexion Jinka, API IDFM, Bien'ici, envoi des annonces…), un email part vers cette
+      adresse (au plus un toutes les 6 h pour la même erreur), puis un autre quand c'est rétabli. Vide = désactivé.
   smtp_server:
     name: Serveur SMTP (optionnel)
     description: Vide = deviné d'après l'adresse de la boîte dédiée (smtp.gmail.com pour Gmail).

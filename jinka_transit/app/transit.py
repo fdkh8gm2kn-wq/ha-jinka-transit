@@ -23,6 +23,7 @@ MODE_MAP = {
 KNOWN_MODES = {"Bus", "Metro", "Funicular", "RapidTransit", "LocalTrain", "Train", "Tramway"}
 
 # Durée de validité d'un trajet en cache (les horaires bougent peu)
+DEST_WALK_MAX = 30  # marche max (min) entre la dernière station et l'adresse de destination
 CACHE_TTL = 30 * 24 * 3600
 
 log = logging.getLogger("transit")
@@ -120,7 +121,7 @@ class Transit:
         une durée max ne relance aucun appel à l'API.
         `home_walk_max` : marche max (min) entre le point de départ (le logement) et la 1re station."""
         key = (f"{from_lat:.4f},{from_lon:.4f}>{to_lat:.5f},{to_lon:.5f}@{arrival_hhmm}"
-               f"|{','.join(sorted(self.allowed))}|{self.max_walk}")
+               f"|{','.join(sorted(self.allowed))}|{self.max_walk}|d{DEST_WALK_MAX}")
         hit = cache.get(key) if cache is not None else None
         if hit and time.time() - hit["ts"] < CACHE_TTL:
             best, self.cache_hits = hit["best"], self.cache_hits + 1
@@ -155,9 +156,11 @@ class Transit:
             ("datetime_represents", "arrival"),
             ("first_section_mode[]", "walking"),
             ("last_section_mode[]", "walking"),
-            ("max_walking_duration_to_pt", self.max_walk * 60),
+            # côté destination on ne choisit pas : la marche n'est bornée que par la durée totale.
+            # Côté logement, le filtre home_walk_max est appliqué ensuite sur les trajets candidats.
+            ("max_walking_duration_to_pt", DEST_WALK_MAX * 60),
             ("max_walking_direct_path_duration", self.max_walk * 60),
-            ("count", 5),
+            ("count", 10),
         ]
         params += [("forbidden_uris[]", f"physical_mode:{m}") for m in self.forbidden]
         self.api_calls += 1
