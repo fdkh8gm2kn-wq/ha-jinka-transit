@@ -5,6 +5,7 @@ import hashlib
 import json
 import logging
 import os
+import random
 import threading
 import time
 from datetime import datetime, timedelta
@@ -478,8 +479,10 @@ class App:
         now = now or datetime.now()
         normal = max(5, int(self.opts.get("scan_interval_minutes", 15))) * 60
         peak_left = self.window_left(self.opts.get("peak_hours"), now)
+        jitter = random.uniform(0.8, 1.3)  # rythme irrégulier, moins « robot »
         if peak_left:
-            return min(max(5, int(self.opts.get("peak_interval_minutes") or 5)) * 60, normal)
+            return int(min(max(5, int(self.opts.get("peak_interval_minutes") or 5)) * 60, normal) * jitter)
+        normal = int(normal * jitter)
         # on ne déborde pas sur le début de la plage de journée ni de la nuit
         nxt = [normal]
         for spec in (self.opts.get("peak_hours"), self.opts.get("quiet_hours")):
