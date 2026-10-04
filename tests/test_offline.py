@@ -459,8 +459,8 @@ assert app.quiet_seconds_left(_dt(2026, 10, 5, 3, 0)) == 0
 print("Pause nocturne ✔")
 app.opts.update({"quiet_hours": "00:00-07:00", "peak_hours": "08:00-19:00", "peak_interval_minutes": 5, "scan_interval_minutes": 15})
 for _ in range(50):
-    assert 240 <= app.scan_interval(_dt(2026, 10, 5, 10, 0)) <= 390
-    assert 720 <= app.scan_interval(_dt(2026, 10, 5, 20, 0)) <= 1170
+    assert 255 <= app.scan_interval(_dt(2026, 10, 5, 10, 0)) <= 345
+    assert 765 <= app.scan_interval(_dt(2026, 10, 5, 20, 0)) <= 1035
 assert len({app.scan_interval(_dt(2026, 10, 5, 10, 0)) for _ in range(20)}) > 1
 assert app.scan_interval(_dt(2026, 10, 5, 7, 55)) == 300   # s'arrête à 8h pile
 assert app.scan_interval(_dt(2026, 10, 5, 23, 50)) == 600  # s'arrête à minuit
