@@ -292,7 +292,7 @@ def render_explore(app):
         rows = []
         for r in ex["results"]:
             cells = "".join(
-                f"<td class='{'ok' if t['ok'] else 'ko'}'>{t['minutes'] if t['minutes'] is not None else '—'} min"
+                f"<td class='{'ok' if t['ok'] else 'ko'}'>{t['minutes'] if t['minutes'] is not None else '—'} min{short_counted(t)}"
                 f"<div class='muted'>{esc(t['summary'] or '')}</div></td>" for t in r["trips"])
             rows.append(f"<tr><td><b class='{'ok' if r['ok'] else 'ko'}'>{'✅' if r['ok'] else '❌'} "
                         f"{esc(r['nom'])}</b><div class='muted'>{esc(r.get('cp') or '')} · "

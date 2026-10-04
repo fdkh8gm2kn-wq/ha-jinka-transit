@@ -68,10 +68,12 @@ def run(transit, dests, radius_km, progress, max_minutes=None, cache=None, pause
                 time.sleep(pause)  # reste sous les limites de débit de l'API IDFM
             trips.append({"name": d["name"], "max": limit, "ok": r["ok"],
                           "minutes": r.get("minutes"), "summary": r.get("summary") or r.get("reason", ""),
-                          "walk_minutes": r.get("walk_minutes")})
+                          "walk_minutes": r.get("walk_minutes"), "transfers": r.get("transfers"),
+                          "counted": r.get("counted", r.get("minutes")), "reason": r.get("reason", "")})
             ok = ok and r["ok"]
         results.append({**c, "ok": ok, "trips": trips,
-                        "worst": max((t["minutes"] for t in trips if t["minutes"] is not None), default=None)})
+                        "worst": max((t.get("counted") or t["minutes"] for t in trips if t["minutes"] is not None),
+                                     default=None)})
         progress["done"] += 1
     results.sort(key=lambda c: (not c["ok"], c["worst"] if c["worst"] is not None else 999))
     return {"at": time.time(), "radius_km": radius_km, "max_minutes": max_minutes, "results": results,
