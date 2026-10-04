@@ -128,6 +128,9 @@ def normalize(ad, alert_id, alert_name):
         "deleted": bool(ad.get("deleted_at") or ad.get("deleted")),
         "image": images[0] if images and isinstance(images[0], str) else None,
         "link": ad_link(ad, alert_id),
+        "uuid": ad.get("uuid"),
+        "stops": ad.get("stops") or [],
+        "description": (ad.get("description") or "")[:2000],
         "quartier": ad.get("quartier_name"),
     }
 

@@ -61,7 +61,8 @@ class App:
         refusées auparavant sont réévaluées."""
         o = self.opts
         key = json.dumps([o["destinations"], sorted(o.get("allowed_modes") or []),
-                          o.get("max_walk_minutes"), o.get("max_rent", 0), o.get("max_walk_home_minutes", 5)],
+                          o.get("max_walk_minutes"), o.get("max_rent", 0), o.get("max_walk_home_minutes", 5),
+                          "localisation-v2"],
                          sort_keys=True)
         return hashlib.sha1(key.encode()).hexdigest()[:12]
 
@@ -104,8 +105,15 @@ class App:
         max_rent = int(self.opts.get("max_rent") or 0)
         if max_rent and listing.get("rent") and listing["rent"] > max_rent:
             return "rejected", [], f"loyer {int(listing['rent'])} € > {max_rent} €"
+        home_walk_max = int(self.opts.get("max_walk_home_minutes", 5))
         if listing["lat"] is None or listing["lng"] is None:
-            return "rejected", [], "pas de coordonnées GPS dans l'annonce"
+            import locate
+            found = locate.locate(listing, transit, self.state.setdefault("geocode", {}))
+            if not found:
+                return "rejected", [], "pas de position (ni GPS, ni station dans l'annonce)"
+            listing["lat"], listing["lng"], listing["approx"] = found
+            if listing["approx"]:
+                home_walk_max = None  # on part de la station elle-même
         cache = self.state.setdefault("journeys", {})
         results = []
         # D'abord les adresses du filtre ; les adresses « pour info » ne sont calculées
@@ -113,7 +121,7 @@ class App:
         for d in [d for d in dests if not d["info_only"]]:
             r = transit.journey(listing["lat"], listing["lng"], d["lat"], d["lon"],
                                 d["arrival_time"], d["max_minutes"], cache=cache,
-                                home_walk_max=int(self.opts.get("max_walk_home_minutes", 5)))
+                                home_walk_max=home_walk_max)
             results.append({"name": d["name"], "max": d["max_minutes"], **r})
             if not r["ok"]:
                 return "rejected", results, f"{d['name']} : {r['reason']}"

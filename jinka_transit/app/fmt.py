@@ -67,6 +67,9 @@ def body_of(v):
                 else f"📍 *{r['name']}* — {r['minutes']} min porte à porte (max {r.get('max', '?')})")
         lines.append(f"{head} · {r.get('walk_minutes', 0)} min à pied · {corr}")
         lines.extend(steps_of(r))
+    if l.get("approx"):
+        lines.append("")
+        lines.append(f"⚠️ Pas d'adresse GPS : position estimée {l['approx']}")
     lines.append("")
     lines.append(f"🔗 {l['link']}")
     if l.get("lat") is not None:
@@ -81,7 +84,8 @@ def short_of(v):
     l = v["listing"]
     trips = " · ".join(f"{r['name'].split(' (')[0]} {r['minutes']}'" for r in v["results"]
                        if not r.get("info_only") and r.get("minutes") is not None)
-    return f"{title_of(l)}\n{trips}\n{l['link']}"
+    approx = "\n(position estimée)" if l.get("approx") else ""
+    return f"{title_of(l)}\n{trips}{approx}\n{l['link']}"
 
 
 def html_of(v):
@@ -103,6 +107,7 @@ def html_of(v):
             if l.get("lat") is not None else "")
     return f"""<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:560px;color:#1c1c1c">
 <h2 style="font-size:18px;margin:0 0 10px">{e(title_of(l))}</h2>{img}
+{f"<p style='background:#fff4e5;padding:8px 10px;border-radius:8px'>⚠️ Pas d'adresse GPS : position estimée {e(l['approx'])}</p>" if l.get("approx") else ""}
 {''.join(blocks)}
 <p style="margin:18px 0"><a href="{e(l['link'])}" style="background:#0b63ce;color:#fff;padding:10px 16px;
 border-radius:8px;text-decoration:none">Voir l'annonce</a>{maps}</p>

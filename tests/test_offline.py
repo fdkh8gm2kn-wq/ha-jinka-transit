@@ -150,7 +150,7 @@ for k in ("ad1", "ad2", "ad3", "ad4"):
 assert L["ad1"]["status"] == "notified"
 assert L["ad2"]["status"] == "rejected" and "aucun trajet" in L["ad2"]["reason"]
 assert L["ad3"]["status"] == "rejected" and "40 min > 30 min" in L["ad3"]["reason"]
-assert L["ad4"]["status"] == "rejected" and "coordonnées" in L["ad4"]["reason"]
+assert L["ad4"]["status"] == "rejected" and "pas de position" in L["ad4"]["reason"]
 assert len(calls["whatsapp"]) == 1
 # le bus est toujours interdit côté requête, et le Transilien aussi ici (non coché)
 forb = calls["prim"][0]["forbidden_uris[]"]
@@ -342,4 +342,41 @@ app.load_options = lambda: app.opts
 res = app.send_test()
 assert res == [("email", True), ("SMS Free", True)], res
 print("notification de test ✔")
+# Annonces sans GPS : station indiquée par Jinka, ou citée dans le texte
+import locate  # noqa: E402
+pages = {
+    "u-texte": '<html>..."lat":null,"lng":null,..."stops":[],"x":1,"description":"Gare La Garenne-Colombes - studio meublé","description_is_truncated":false',
+    "u-stops": '<html>..."lat":null,"lng":null,..."stops":[{"id":"500008","name":"Saint-Gratien","lines":["RER C"]}],"x":1,"description":"joli studio","description_is_truncated":false',
+    "u-gps": '<html>..."lat":48.9,"lng":2.25,..."stops":[],"x":1',
+}
+_prev = urllib.request.urlopen
+def urlopen_loc(req, timeout=None):
+    u = req.full_url
+    if "www.jinka.fr/ad/" in u:
+        return FakeResp(pages[u.rsplit("/", 1)[1]].replace('"', '\\"'))
+    if "/places" in u:
+        q = parse_qs(urlparse(u).query)["q"][0]
+        coords = {"La Garenne-Colombes": ("48.9066", "2.2449"), "Saint-Gratien": ("48.9717", "2.2853")}
+        if q in coords:
+            return FakeResp({"places": [{"name": q, "embedded_type": "stop_area",
+                                         "stop_area": {"coord": {"lat": coords[q][0], "lon": coords[q][1]}}}]})
+        return FakeResp({"places": [{"name": "Loin", "stop_area": {"coord": {"lat": "45.0", "lon": "4.0"}}}]})
+    if "geo.api.gouv.fr/communes" in u:
+        cp = parse_qs(urlparse(u).query)["codePostal"][0]
+        c = {"92700": (2.2522, 48.9223), "95210": (2.2853, 48.9717)}[cp]
+        return FakeResp([{"nom": "x", "centre": {"coordinates": list(c)}}])
+    return _prev(req, timeout)
+urllib.request.urlopen = urlopen_loc
+locate.time.sleep = lambda s: None
+tl = Transit("k", ["metro", "rer"])
+cache_l = {}
+r = locate.locate({"uuid": "u-texte", "postal_code": "92700", "city": "Colombes"}, tl, cache_l)
+assert r and abs(r[0] - 48.9066) < 1e-6 and "La Garenne-Colombes" in r[2] and "dans l'annonce" in r[2], r
+r = locate.locate({"uuid": "u-stops", "postal_code": "95210", "city": "Saint-Gratien"}, tl, cache_l)
+assert r and "Saint-Gratien (RER C), indiquée par Jinka" in r[2], r
+r = locate.locate({"uuid": "u-gps", "postal_code": "92700", "city": "Colombes"}, tl, cache_l)
+assert r == (48.9, 2.25, None), r
+r = locate.locate({"uuid": "u-texte", "postal_code": "95210", "city": "Saint-Gratien"}, tl, {})
+assert r is None or "Garenne" in r[2]  # station trop loin de la commune -> rejetée si > 6 km
+print("annonces sans GPS : station Jinka / texte ✔")
 print("\nTous les tests passent ✔")

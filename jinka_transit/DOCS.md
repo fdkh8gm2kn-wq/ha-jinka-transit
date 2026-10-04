@@ -74,6 +74,13 @@ depuis le centre de chaque commune. Carte + liste à recopier dans le secteur de
   vers le numéro de la ligne Free qui a activé l'option « Notifications par SMS ».
 - WhatsApp (CallMeBot) et service notify de Home Assistant restent possibles. Tous les canaux configurés sont utilisés.
 
+## Annonces sans GPS
+
+Si Jinka ne donne pas de coordonnées, l'add-on lit la fiche publique de l'annonce : coordonnées, puis
+« stations proches » indiquées par Jinka, puis station citée dans le texte (« gare de La Garenne-Colombes »,
+« métro Nation »…). Le trajet est alors calculé depuis cette station et le message indique
+« ⚠️ position estimée ». Sans rien de tout ça, l'annonce est écartée.
+
 ## Réglages
 
 - **destinations** : jusqu'à 5. Chaque ligne : `name`, `address` (adresse postale, « Gare de Lyon »,
