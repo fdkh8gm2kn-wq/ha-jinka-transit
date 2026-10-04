@@ -56,7 +56,16 @@ def safe_json(obj):
 PAGE_SIZE = 50
 
 
-def render(app, flt, page=1):
+FILTERS = {  # clé d'URL : (libellé, statuts affichés)
+    "ok": ("OK", lambda s: s in ("match", "notified", "silent")),
+    "dup": ("doublons", lambda s: s == "duplicate"),
+    "ko": ("refusées", lambda s: s == "rejected"),
+    "all": ("toutes", lambda s: True),
+}
+DEFAULT_FILTER = "ok"
+
+
+def render(app, flt=DEFAULT_FILTER, page=1):
     esc = html.escape
     st = app.state
     geocache = st.get("geocode", {})
@@ -67,10 +76,8 @@ def render(app, flt, page=1):
         for d in app.opts["destinations"]) or "<tr><td colspan=5>Aucune adresse configurée</td></tr>"
 
     items = sorted(st.get("listings", {}).values(), key=lambda v: v.get("ts", 0), reverse=True)
-    if flt == "ok":
-        items = [v for v in items if v["status"] != "rejected"]
-    elif flt == "ko":
-        items = [v for v in items if v["status"] == "rejected"]
+    counts = {k: sum(1 for v in items if FILTERS[k][1](v["status"])) for k in FILTERS}
+    items = [v for v in items if FILTERS[flt][1](v["status"])]
     pages = max(1, -(-len(items) // PAGE_SIZE))
     page = min(max(1, page), pages)
     total = len(items)
@@ -87,7 +94,7 @@ def render(app, flt, page=1):
                f"{esc(chr(10).join(x.strip().replace('*', '') for x in steps_of(r)))}</div></details>"
                if r.get("steps") else "")
             for r in v.get("results", [])) or f"<span class='ko'>{esc(v.get('reason', ''))}</span>"
-        cls = "ko" if v["status"] == "rejected" else "ok"
+        cls = "ko" if v["status"] == "rejected" else "muted" if v["status"] == "duplicate" else "ok"
         rows.append(
             f"<tr><td><a href='{esc(l['link'])}' target='_blank' rel='noopener'>{esc(title_of(l))}</a>"
             f"<div class='muted'>{esc(l.get('source') or '')} · {esc(l.get('alert_name') or '')}</div></td>"
@@ -95,7 +102,7 @@ def render(app, flt, page=1):
             f"<td class='muted'>{datetime.fromtimestamp(v.get('ts', 0)).strftime('%d/%m %H:%M')}</td></tr>")
     filters = " ".join(
         f"<a href='?f={k}'{' style=font-weight:700' if flt == k else ''}>{label}</a>"
-        for k, label in (("all", "toutes"), ("ok", "OK"), ("ko", "refusées")))
+        for k, label in ((k, f"{FILTERS[k][0]} ({counts[k]})") for k in FILTERS))
     nav = [f"<a href='?f={esc(flt)}&p={page - 1}'>« précédentes</a>" if page > 1 else "",
            f"page {page} / {pages} ({total} annonces)",
            f"<a href='?f={esc(flt)}&p={page + 1}'>suivantes »</a>" if page < pages else ""]
@@ -170,7 +177,7 @@ def start(app, port=8099):
             if path.rstrip("/").endswith("explore"):
                 return self._send(200, render_explore(app))
             q = {k: v[0] for k, v in parse_qs(query).items()}
-            flt = q.get("f", "all") if q.get("f") in ("all", "ok", "ko") else "all"
+            flt = q["f"] if q.get("f") in FILTERS else DEFAULT_FILTER
             page = int(q["p"]) if q.get("p", "").isdigit() else 1
             self._send(200, render(app, flt, page))
 

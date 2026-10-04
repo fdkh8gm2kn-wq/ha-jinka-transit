@@ -498,7 +498,12 @@ assert "page 1 / 3 (121 annonces)" in p1 and "suivantes »" in p1 and "« préc�
 assert "page 3 / 3" in p3 and p3.count("<tr><td><a href=") == 21
 assert p1.count("<tr><td><a href=") == 50
 assert "page 3 / 3" in _web.render(app, "all", 99)
+app.state["listings"]["p5"]["status"] = "duplicate"
+app.state["listings"]["p6"]["status"] = "notified"
+assert "page 1 / 1 (1 annonces)" in _web.render(app, "dup") and "page 1 / 1 (1 annonces)" in _web.render(app)  # défaut = OK
+assert "doublons (1)" in _web.render(app) and "refusées (119)" in _web.render(app)
 app.purge_old_listings(_now)
 assert "old" not in app.state["listings"] and "old" in app.state["forgotten"]
 assert "tres-vieux" not in app.state["forgotten"] and len(app.state["listings"]) == 120
+print("Filtres OK (défaut) / doublons / refusées ✔")
 print("Pagination + purge 30 jours ✔")
