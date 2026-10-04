@@ -23,8 +23,9 @@ Clique, confirme dans Home Assistant, puis installe **Jinka Transit** dans la bo
 | **Clé CallMeBot** (WhatsApp, gratuite) | Suis callmebot.com/blog/free-api-whatsapp-messages : tu envoies un message d'activation au numéro indiqué, tu reçois une `apikey`. |
 
 **Connexion Jinka 100 % automatique (recommandé)** : utilise pour Jinka une adresse email dédiée.
-Dans la configuration, mets cette adresse dans `jinka_email` et le mot de passe de la boîte dans
-`mail_password` (Gmail : mot de passe d'application). L'add-on demande un code à Jinka, le lit dans
+Dans la configuration, mets cette adresse dans « Email Jinka » et la **clé d'application Google**
+(16 lettres, créée sur myaccount.google.com/apppasswords après activation de la validation en 2 étapes)
+dans « Clé d'application Google ». L'add-on demande un code à Jinka, le lit dans
 la boîte (réception puis spam) et se reconnecte seul, y compris quand la session expire.
 
 **Connexion Jinka par code email, à la main** : ouvre la page de l'add-on (« Appart métro/RER »),

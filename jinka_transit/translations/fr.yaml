@@ -8,10 +8,11 @@ configuration:
     name: Jeton Jinka
     description: Valeur du cookie LA_API_TOKEN sur jinka.fr (comptes Google/Apple/code email). Voir la doc.
   mail_password:
-    name: Mot de passe de la boîte mail dédiée
+    name: Clé d'application Google (boîte mail dédiée)
     description: >-
-      Pour la connexion 100 % automatique : l'add-on lit lui-même le code Jinka reçu sur l'email Jinka
-      ci-dessus. Gmail : mot de passe d'application. Laisse vide pour te connecter à la main.
+      Code de 16 lettres créé sur myaccount.google.com/apppasswords pour l'adresse Gmail ci-dessus.
+      L'add-on s'en sert pour lire lui-même le code Jinka et se connecter tout seul.
+      Autre fournisseur que Gmail : mets ici le mot de passe (ou la clé d'application) de la boîte.
   mail_user:
     name: Identifiant IMAP (optionnel)
     description: Vide = l'email Jinka.
