@@ -2,6 +2,7 @@
 
 import datetime as dt
 import json
+from datetime import datetime, timedelta
 import logging
 import re
 import time
@@ -33,6 +34,10 @@ class TransitError(Exception):
     """Erreur temporaire (réseau, quota…) : l'annonce sera réévaluée au prochain scan."""
 
 
+class QuotaError(TransitError):
+    """Quota journalier de l'API IDFM atteint (HTTP 429) : plus aucun appel avant la date `until`."""
+
+
 def next_weekday(hhmm, now=None):
     """Prochain jour ouvré (à partir de demain) à l'heure donnée, au format Navitia."""
     now = now or dt.datetime.now()
@@ -44,8 +49,10 @@ def next_weekday(hhmm, now=None):
 
 
 class Transit:
-    def __init__(self, api_key, allowed_modes, max_walk_minutes=15, transfer_penalty=0, max_transfers=None):
+    def __init__(self, api_key, allowed_modes, max_walk_minutes=15, transfer_penalty=0, max_transfers=None,
+                 quota=None):
         self.api_key = api_key
+        self.quota = {} if quota is None else quota  # état partagé/persistant du quota : {"until", "day"}
         self.transfer_penalty = int(transfer_penalty or 0)  # minutes ajoutées par correspondance (risque de retard)
         self.max_transfers = None if max_transfers is None else int(max_transfers)
         self.allowed = set()
@@ -56,10 +63,36 @@ class Transit:
         self.api_calls = 0
         self.cache_hits = 0
 
+    def quota_until(self):
+        """Date (timestamp) avant laquelle on n'appelle plus l'API, ou 0."""
+        until = self.quota.get("until", 0)
+        return until if until > time.time() else 0
+
+    def _block(self):
+        """Quota atteint : on attend minuit (le quota est journalier). Si on vient déjà d'attendre minuit
+        et que le quota n'est toujours pas renouvelé, on réessaie dans 1 h."""
+        now = datetime.now()
+        today = now.strftime("%Y-%m-%d")
+        if self.quota.get("day") and self.quota["day"] != today:
+            until = now + timedelta(hours=1)
+        else:
+            until = (now + timedelta(days=1)).replace(hour=0, minute=5, second=0, microsecond=0)
+        self.quota.update({"until": until.timestamp(), "day": self.quota.get("day") or today})
+        return until
+
     def _prim(self, path, params):
+        if self.quota_until():
+            raise QuotaError(f"quota IDFM atteint (429), reprise le "
+                             f"{datetime.fromtimestamp(self.quota['until']):%d/%m à %H:%M}")
         try:
-            return get_json(f"{PRIM}{path}", params=params, headers={"apikey": self.api_key})
+            data = get_json(f"{PRIM}{path}", params=params, headers={"apikey": self.api_key})
+            if self.quota:
+                self.quota.clear()  # quota renouvelé
+            return data
         except HttpError as e:
+            if e.status == 429:
+                until = self._block()
+                raise QuotaError(f"quota IDFM atteint (429), reprise le {until:%d/%m à %H:%M}") from None
             if e.status in (401, 403):
                 raise TransitError("Clé API PRIM refusée : vérifie prim_api_key.") from None
             if e.status == 404:

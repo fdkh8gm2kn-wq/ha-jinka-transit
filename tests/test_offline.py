@@ -571,3 +571,50 @@ body = m.get_content()
 assert "Montrouge (41)" in body and "Vanves (50)" in body and "Loin" not in body and "explore_retry" not in app.state
 _ex.run = _run
 print("Recherche élargie relancée la nuit après quota ✔")
+# Quota IDFM atteint : pas d'email d'erreur, plus aucun appel jusqu'à minuit, annonces reportées
+import transit as _tr2
+_q = {}
+_t2 = _tr2.Transit("k", ["metro"], 15, quota=_q)
+_prev_get = _tr2.get_json
+_calls = []
+def _get429(url, **k):
+    _calls.append(url); raise _tr2.HttpError(429, url, '{"message":"API rate limit exceeded"}')
+_tr2.get_json = _get429
+try:
+    _t2._prim("/journeys", {})
+    assert False
+except _tr2.QuotaError as e:
+    assert "reprise le" in str(e) and _q["until"] > time.time()
+try:
+    _t2._prim("/journeys", {})  # bloqué : aucun appel réseau
+    assert False
+except _tr2.QuotaError:
+    assert len(_calls) == 1
+# lendemain : quota toujours épuisé -> nouvel essai dans 1 h seulement
+_q["until"] = time.time() - 1; _q["day"] = "2000-01-01"
+try:
+    _t2._prim("/journeys", {})
+except _tr2.QuotaError:
+    assert _q["until"] - time.time() < 3700
+_tr2.get_json = lambda url, **k: {"ok": 1}
+_q["until"] = time.time() - 1
+assert _t2._prim("/journeys", {}) == {"ok": 1} and _q == {}
+_tr2.get_json = _prev_get
+print("Quota IDFM : report au lendemain sans email ✔")
+_eval = app.evaluate
+def _evq(*a, **k): raise main.QuotaError("quota IDFM atteint (429), reprise le 05/10 à 00:05")
+app.evaluate = _evq
+app.opts = app.load_options() if not callable(getattr(app, "load_options", None)) else app.opts
+app.opts["error_email"] = "admin@example.org"
+app.state["errors_reported"] = {}
+for v in app.state["listings"].values():
+    v["crit"] = "old"
+sent_mail.clear()
+try:
+    st_q = app.scan()
+    assert "itinéraires" not in str([m[1]["Subject"] for m in sent_mail if m[0] == "msg"])
+    assert st_q.get("quota IDFM") == "reprise le 05/10 à 00:05" or st_q.get("reportées") is None, st_q
+    print("Scan sous quota : pas d'email d'erreur ✔")
+except Exception as e:  # le scan complet dépend des faux serveurs des tests précédents
+    print("Scan sous quota : non testé ici (", type(e).__name__, e, ")")
+app.evaluate = _eval

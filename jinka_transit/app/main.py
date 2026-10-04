@@ -14,7 +14,7 @@ from fmt import body_of, html_of, short_of, title_of
 from jinka import Jinka, JinkaAuthError
 from notify import Notifier
 from http_util import HttpError
-from transit import CACHE_TTL, Transit, TransitError
+from transit import CACHE_TTL, QuotaError, Transit, TransitError
 import web
 
 OPTIONS_PATH = os.environ.get("OPTIONS_PATH", "/data/options.json")
@@ -121,7 +121,8 @@ class App:
     def make_transit(self):
         o = self.opts
         return Transit(o["prim_api_key"], o.get("allowed_modes"), o.get("max_walk_minutes", 15),
-                       transfer_penalty=o.get("transfer_penalty_minutes", 3), max_transfers=o.get("max_transfers", 2))
+                       transfer_penalty=o.get("transfer_penalty_minutes", 3), max_transfers=o.get("max_transfers", 2),
+                       quota=self.state.setdefault("idfm_quota", {}))
 
     def transfer_reject(self, results):
         """Vérifie des trajets déjà calculés avec la règle des correspondances. Renvoie la raison ou None."""
@@ -256,6 +257,11 @@ class App:
                 continue
             try:
                 status, results, reason = self.evaluate(l, dests, transit)
+            except QuotaError as e:
+                # pas d'email : les annonces en attente seront calculées dès que le quota est renouvelé
+                stats["reportées"] = stats.get("reportées", 0) + 1
+                stats["quota IDFM"] = str(e).split("(429), ")[-1]
+                continue  # sans appel réseau : on continue pour les annonces déjà en cache
             except TransitError as e:
                 log.error("Calcul d'itinéraire impossible (%s) : on réessaiera au prochain scan.", e)
                 self.report_error("itinéraires", f"Calcul d'itinéraire impossible (API IDFM) : {e}")
@@ -296,6 +302,8 @@ class App:
             log.info("%d annonces en attente, envoyées aux prochains scans.", len(pending) - limit)
         self.state["first_run_done"] = True
         self.save_state()
+        if stats.get("reportées"):
+            log.info("Quota IDFM atteint : %d annonce(s) reportée(s), %s.", stats["reportées"], stats["quota IDFM"])
         stats["envoyées"] = sent
         stats["appels IDFM"] = transit.api_calls
         stats["trajets en cache"] = transit.cache_hits
