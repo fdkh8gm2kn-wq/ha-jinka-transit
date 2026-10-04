@@ -249,8 +249,9 @@ def render_explore(app):
 <script>
 const pts={points}, dpts={dpoints};
 const map=L.map('map');
-L.tileLayer('https://{{s}}.basemaps.cartocdn.com/rastertiles/voyager/{{z}}/{{x}}/{{y}}{{r}}.png',{{maxZoom:19,subdomains:'abcd',
- attribution:'© OpenStreetMap © CARTO'}}).addTo(map);
+L.tileLayer('https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2'
+ +'&STYLE=normal&TILEMATRIXSET=PM&FORMAT=image/png&TILEMATRIX={{z}}&TILEROW={{y}}&TILECOL={{x}}',
+ {{maxZoom:18,attribution:'© IGN Géoplateforme'}}).addTo(map);
 const b=[];
 pts.forEach(p=>{{b.push([p.lat,p.lon]);L.circleMarker([p.lat,p.lon],{{radius:p.ok?8:5,color:p.ok?'#1a7f37':'#b42318',
  fillOpacity:p.ok?.7:.35,weight:1}}).bindTooltip(p.n+' — '+p.t).addTo(map)}});
