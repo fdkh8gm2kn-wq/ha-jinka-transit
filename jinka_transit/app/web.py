@@ -85,7 +85,7 @@ button,.btn{font:inherit;padding:7px 14px;border-radius:9px;border:1px solid var
 .dpe{font-weight:700;color:#111}.dpe.A{background:#009c6d;color:#fff}.dpe.B{background:#52b153;color:#fff}.dpe.C{background:#a3cf5e}
 .dpe.D{background:#f6e04b}.dpe.E{background:#f0b40f}.dpe.F{background:#eb8235;color:#fff}.dpe.G{background:#d7221f;color:#fff}
 .trips{display:flex;gap:6px;flex-wrap:wrap}.trip{font-size:13px;padding:3px 8px;border-radius:8px;background:var(--okbg);color:var(--ok)}
-.trip.ko{background:var(--kobg);color:var(--ko)}.trip small{opacity:.8}
+.trip.ko{background:var(--kobg);color:var(--ko)}.trip.info{background:var(--chip);color:var(--muted)}.trip small{opacity:.8}
 .why{font-size:13px;color:var(--ko)}
 details{font-size:13px}summary{cursor:pointer;color:var(--muted)}details .it{white-space:pre-line;color:var(--muted);margin:4px 0 8px}
 .foot{display:flex;justify-content:space-between;align-items:center;gap:6px;margin-top:auto;padding-top:4px;flex-wrap:wrap}
@@ -134,6 +134,18 @@ def ago(ts):
 def short_dest(name):
     m = re.search(r"\(([^)]+)\)", name or "")
     return m.group(1) if m else (name or "")
+
+
+DEST_ICONS = ((r"travail|bureau|boulot|job|work", "💼"), (r"[ée]cole|fac|univ|campus|lyc[ée]e", "🎓"),
+              (r"gare|train", "🚆"), (r"arena|concert|salle|z[ée]nith|olympia|stade", "🎤"))
+
+
+def dest_icon(name):
+    """Icône d'une adresse (💼 travail, 🎓 école, 🚆 gare, 🎤 salle de concert), sinon son nom court."""
+    for pat, ico in DEST_ICONS:
+        if re.search(pat, name or "", re.I):
+            return ico
+    return html.escape(short_dest(name))
 
 
 def worst_minutes(v):
@@ -190,12 +202,13 @@ def card(v, tag, back, esc=html.escape):
         steps = esc("\n".join(x.strip().replace("*", "") for x in steps_of(r)))
         line = (f"<b>{esc(r['name'])}</b> — {r['minutes']} min{short_counted(r)} · {esc(r.get('summary') or '')}"
                 f"<div class='it'>{steps}</div>")
+        chip_cls = "info" if r.get("info_only") else ("" if r.get("ok") else "ko")
+        trips.append(f"<span class='trip {chip_cls}' title='{esc(r['name'])} · {esc(r.get('summary') or '')}'>"
+                     f"{dest_icon(r['name'])} {r['minutes']}'</span>")
         if r.get("info_only"):
             infos.append(line)
-            continue
-        trips.append(f"<span class='trip{'' if r.get('ok') else ' ko'}' title='{esc(r.get('summary') or '')}'>"
-                     f"{esc(short_dest(r['name']))} {r['minutes']}'</span>")
-        infos.insert(0, line)
+        else:
+            infos.insert(0, line)
     why = (f"<div class='why'>{esc(v.get('reason') or '')}</div>"
            if v["status"] in ("rejected", "duplicate", "pending") and v.get("reason") else "")
     anchor = "a" + hashlib.sha1(lid.encode()).hexdigest()[:10]

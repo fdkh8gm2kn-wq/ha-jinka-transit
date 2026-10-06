@@ -734,3 +734,6 @@ app.purge_old_listings()
 assert _any in app.state["listings"]  # suivie : jamais supprimée
 assert _web.short_dest("Travail (Bureau)") == "Bureau" and _web.short_dest("Gare du Nord") == "Gare du Nord"
 print("Interface : vues, suivi, tri ✔")
+assert _web.dest_icon("Travail (Bureau)") == "💼" and _web.dest_icon("École (Campus)") == "🎓"
+assert _web.dest_icon("Gare du Nord") == "🚆" and _web.dest_icon("Arena Nanterre") == "🎤" and _web.dest_icon("Chez mamie") == "Chez mamie"
+print("Icônes des adresses ✔")
