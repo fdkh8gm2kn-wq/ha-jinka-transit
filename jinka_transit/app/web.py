@@ -84,12 +84,13 @@ button,.btn{font:inherit;padding:7px 14px;border-radius:9px;border:1px solid var
 .b.warn{background:var(--warnbg);color:var(--warn)}.b.nm{background:var(--accentbg);color:var(--accent);font-weight:600}
 .dpe{font-weight:700;color:#111}.dpe.A{background:#009c6d;color:#fff}.dpe.B{background:#52b153;color:#fff}.dpe.C{background:#a3cf5e}
 .dpe.D{background:#f6e04b}.dpe.E{background:#f0b40f}.dpe.F{background:#eb8235;color:#fff}.dpe.G{background:#d7221f;color:#fff}
-.trips{display:flex;gap:6px;flex-wrap:wrap}.trip{font-size:13px;padding:3px 8px;border-radius:8px;background:var(--okbg);color:var(--ok)}
+.trips{display:flex;gap:6px;flex-wrap:wrap}.trip{font-size:15px;font-weight:600;padding:4px 10px 4px 6px;border-radius:10px;background:var(--okbg);color:var(--ok);display:inline-flex;align-items:center;gap:5px}
+.trip .ic{font-size:22px;line-height:1}
 .trip.ko{background:var(--kobg);color:var(--ko)}.trip.info{background:var(--chip);color:var(--muted)}.trip small{opacity:.8}
 .why{font-size:13px;color:var(--ko)}
 details{font-size:13px}summary{cursor:pointer;color:var(--muted)}details .it{white-space:pre-line;color:var(--muted);margin:4px 0 8px}
 .foot{display:flex;justify-content:space-between;align-items:center;gap:6px;margin-top:auto;padding-top:4px;flex-wrap:wrap}
-.acts{display:flex;gap:4px}.acts form{margin:0}.acts button{padding:4px 8px;background:var(--chip);border:1px solid var(--line);color:var(--fg);font-size:15px;line-height:1}
+.acts{display:flex;gap:4px}.acts form{margin:0}.acts button{padding:6px 9px;background:var(--chip);border:1px solid var(--line);color:var(--fg);font-size:20px;line-height:1}
 .acts button.on{background:var(--accentbg);border-color:var(--accent)}
 .st{font-size:12px}.pager{margin:14px 0;display:flex;gap:12px;align-items:center;justify-content:center}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:12px 0}
@@ -204,7 +205,7 @@ def card(v, tag, back, esc=html.escape):
                 f"<div class='it'>{steps}</div>")
         chip_cls = "info" if r.get("info_only") else ("" if r.get("ok") else "ko")
         trips.append(f"<span class='trip {chip_cls}' title='{esc(r['name'])} · {esc(r.get('summary') or '')}'>"
-                     f"{dest_icon(r['name'])} {r['minutes']}'</span>")
+                     f"<span class='ic'>{dest_icon(r['name'])}</span>{r['minutes']}'</span>")
         if r.get("info_only"):
             infos.append(line)
         else:
