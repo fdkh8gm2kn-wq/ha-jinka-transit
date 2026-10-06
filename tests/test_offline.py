@@ -637,3 +637,10 @@ assert app.basic_reject({"furnished": False, "description": ""}) == "non meublé
 app.opts["furnished_only"] = False
 assert app.basic_reject({"furnished": False, "description": ""}) is None
 print("Non meublés signalés ✔")
+# Classe énergie (DPE) dans le titre
+import jinka as _jk
+assert _jk.normalize({"id": 1, "energy_dpe": "d"}, "a", "n")["dpe"] == "D"
+assert _jk.normalize({"id": 1, "energy_dpe": "NC"}, "a", "n")["dpe"] is None
+assert bienici.normalize({**bi_ads[0], "energyClassification": "C"})["dpe"] == "C"
+assert "DPE C" in fmt.title_of({"rooms": 1, "area": 22, "rent": 800, "city": "Vanves", "dpe": "C", "furnished": False})
+print("DPE dans le titre ✔", fmt.title_of({"rooms": 1, "area": 22, "rent": 800, "city": "Vanves", "postal_code": "92170", "dpe": "C", "furnished": False}))

@@ -9,6 +9,8 @@ def title_of(l):
         parts.append(f"{int(l['area'])} m²")
     if l.get("rent"):
         parts.append(f"{int(l['rent']):,} €".replace(",", " "))
+    if l.get("dpe"):
+        parts.append(f"DPE {l['dpe']}")
     if l.get("furnished") is False:
         parts.append("📦 NON MEUBLÉ")
     elif l.get("furnished"):

@@ -11,6 +11,7 @@ import time
 import urllib.parse
 
 from http_util import HttpError, get_json
+from jinka import dpe_letter
 
 API = "https://www.bienici.com/realEstateAds.json"
 SUGGEST = "https://res.bienici.com/suggest.json"
@@ -102,6 +103,7 @@ def normalize(ad):
         "safety": safety,
         "coliving": is_coliving(ad),
         "furnished": ad.get("isFurnished"),
+        "dpe": dpe_letter(ad.get("energyClassification")),
     }
 
 

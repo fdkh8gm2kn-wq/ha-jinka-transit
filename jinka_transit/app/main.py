@@ -243,6 +243,8 @@ class App:
             if l["id"] in forgotten:  # vue il y a plus de 30 jours : on ne la retraite pas
                 continue
             prev = known.get(l["id"])
+            if prev:  # complète les annonces déjà connues (champs ajoutés depuis : DPE, meublé)
+                prev["listing"].update({k: l[k] for k in ("dpe", "furnished") if l.get(k) is not None})
             first_seen = (prev or {}).get("first_seen") or (prev or {}).get("ts") or time.time()
             if prev and prev["status"] in ("notified", "silent", "duplicate"):
                 continue

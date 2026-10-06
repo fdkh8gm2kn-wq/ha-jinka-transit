@@ -133,7 +133,14 @@ def normalize(ad, alert_id, alert_name):
         "description": (ad.get("description") or "")[:2000],
         "quartier": ad.get("quartier_name"),
         "furnished": ad.get("furnished"),
+        "dpe": dpe_letter(ad.get("energy_dpe") or ad.get("dpe")),
     }
+
+
+def dpe_letter(v):
+    """Classe énergie (A à G) ou None."""
+    v = (v or "").strip().upper() if isinstance(v, str) else ""
+    return v if len(v) == 1 and v in "ABCDEFG" else None
 
 
 def ad_link(ad, alert_id):
