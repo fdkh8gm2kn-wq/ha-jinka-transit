@@ -103,31 +103,89 @@ def short_of(v):
     return f"{title_of(l)}\n{trips}{approx}\n{l['link']}"
 
 
+DEST_ICONS = ((r"travail|bureau|boulot|job|work", "💼"), (r"[ée]cole|fac|univ|campus|lyc[ée]e", "🎓"),
+              (r"gare|train", "🚆"), (r"arena|concert|salle|z[ée]nith|olympia|stade", "🎤"))
+
+
+def dest_icon(name, short=True):
+    """Icône d'une adresse (💼 travail, 🎓 école, 🚆 gare, 🎤 salle de concert), sinon son nom court."""
+    import re
+    for pat, ico in DEST_ICONS:
+        if re.search(pat, name or "", re.I):
+            return ico
+    m = re.search(r"\(([^)]+)\)", name or "")
+    return m.group(1) if (m and short) else (name or "")
+
+
+DPE_COLORS = {"A": ("#009c6d", "#fff"), "B": ("#52b153", "#fff"), "C": ("#a3cf5e", "#111"), "D": ("#f6e04b", "#111"),
+              "E": ("#f0b40f", "#111"), "F": ("#eb8235", "#fff"), "G": ("#d7221f", "#fff")}
+
+
 def html_of(v):
-    """Version email : photo, trajets détaillés et bouton vers l'annonce."""
+    """Version email, façon alerte de portail immobilier : photo, prix, badges, trajets en icônes, bouton."""
     from html import escape as e
     l = v["listing"]
-    blocks = []
-    for r in v["results"]:
+    brand = e(v.get("brand") or "Jinka Transit")
+    link = e(l.get("link") or "#")
+    font = "font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
+    badge = ("display:inline-block;padding:3px 8px;border-radius:6px;font-size:12px;font-weight:600;"
+             "margin:0 4px 4px 0;background:#f2f4f7;color:#344054")
+    photo = (f"<a href='{link}'><img src='{e(l['image'])}' alt='' width='600' "
+             f"style='display:block;width:100%;max-width:600px;height:auto;border:0'></a>"
+             if l.get("image") and str(l["image"]).startswith("http") else
+             f"<a href='{link}' style='display:block;text-decoration:none;background:#eef2ff;text-align:center;"
+             f"font-size:56px;line-height:180px'>🏠</a>")
+    facts = " · ".join(x for x in (
+        f"{int(l['rooms'])} pièce{'s' if l['rooms'] > 1 else ''}" if l.get("rooms") else "",
+        f"{l['area']:g} m²" if l.get("area") else "", building_info(l)) if x)
+    badges = []
+    if l.get("dpe") in DPE_COLORS:
+        bg, fg = DPE_COLORS[l["dpe"]]
+        badges.append(f"<span style='{badge};background:{bg};color:{fg}'>DPE {l['dpe']}</span>")
+    if l.get("furnished") is False:
+        badges.append(f"<span style='{badge};background:#eef2ff;color:#3a5bdc'>📦 Non meublé</span>")
+    elif l.get("furnished"):
+        badges.append(f"<span style='{badge}'>Meublé</span>")
+    if l.get("source"):
+        badges.append(f"<span style='{badge}'>{e(str(l['source']).split(' · ')[0])}</span>")
+    chips, details = [], []
+    for r in v.get("results", []):
         if r.get("minutes") is None:
-            blocks.append(f"<p style='color:#666'>ℹ️ <b>{e(r['name'])}</b> : {e(r.get('reason') or 'pas de trajet')}</p>")
             continue
-        head = (f"ℹ️ <b>{e(r['name'])}</b> (pour info) — {r['minutes']} min" if r.get("info_only")
-                else f"📍 <b>{e(r['name'])}</b> — <b>{r['minutes']} min</b> porte à porte{counted_txt(r)} (max {r.get('max', '?')})")
-        steps = "".join(f"<li>{e(s.strip().replace('*', ''))}</li>" for s in steps_of(r))
-        blocks.append(f"<p style='margin:14px 0 4px'>{head}</p><ul style='margin:0;padding-left:18px;color:#333'>{steps}</ul>")
-    img = (f"<img src='{e(l['image'])}' alt='' style='width:100%;max-width:560px;border-radius:10px'>"
-           if l.get("image") else "")
-    maps = (f" · <a href='https://maps.google.com/?q={l['lat']},{l['lng']}'>voir sur la carte</a>"
-            if l.get("lat") is not None else "")
-    return f"""<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:560px;color:#1c1c1c">
-<h2 style="font-size:18px;margin:0 0 10px">{e(title_of(l))}</h2>{img}
-{f"<p style='background:#fff4e5;padding:8px 10px;border-radius:8px'>⚠️ Pas d'adresse GPS : position estimée {e(l['approx'])}</p>" if l.get("approx") else ""}
-{''.join(blocks)}
-<p style="margin:18px 0"><a href="{e(l['link'])}" style="background:#0b63ce;color:#fff;padding:10px 16px;
-border-radius:8px;text-decoration:none">Voir l'annonce</a>{maps}</p>
-{f"<p>🏢 {e(building_info(l))}</p>" if building_info(l) else ""}
-<p style="color:#888;font-size:12px">{e(l.get('source') or '')} · alerte « {e(l.get('alert_name') or '')} » · {e(v.get('brand') or 'Jinka Transit')}</p></div>"""
+        info = r.get("info_only")
+        bg, fg = ("#f2f4f7", "#667085") if info else (("#e7f6ef", "#12805c") if r.get("ok") else ("#fdecea", "#b42318"))
+        chips.append(f"<td style='padding:0 6px 6px 0'><span style='display:inline-block;padding:6px 10px;border-radius:10px;"
+                     f"background:{bg};color:{fg};font-size:16px;font-weight:700;white-space:nowrap'>"
+                     f"<span style='font-size:20px'>{dest_icon(r['name'])}</span> {r['minutes']}'</span></td>")
+        steps = "<br>".join(e(x.strip().replace("*", "")) for x in steps_of(r))
+        details.append(f"<p style='margin:12px 0 2px;font-size:14px'><b>{dest_icon(r['name'])} {e(r['name'])}</b> — "
+                       f"{r['minutes']} min porte à porte{counted_txt(r) if not info else ''}"
+                       f"{'' if info else ' (max ' + str(r.get('max', '?')) + ')'}</p>"
+                       f"<p style='margin:0;font-size:13px;color:#475467;line-height:1.5'>{steps}</p>")
+    approx = (f"<p style='margin:10px 0 0;padding:8px 10px;border-radius:8px;background:#fef4e2;color:#a15c07;font-size:13px'>"
+              f"⚠️ Position estimée : {e(str(l['approx']))}</p>" if l.get("approx") else "")
+    maps = (f"<a href='https://maps.google.com/?q={l['lat']},{l['lng']}' style='color:#3a5bdc;font-size:13px'>"
+            f"Voir sur la carte</a>" if l.get("lat") is not None and not l.get("approx") else "")
+    where = e(l.get("city") or "") + (f" <span style='color:#667085;font-weight:400'>{e(l.get('postal_code') or '')}"
+                                     f"{' · ' + e(l['quartier']) if l.get('quartier') else ''}</span>")
+    rent = f"{int(l['rent']):,}".replace(",", " ") if l.get("rent") else "?"
+    return f"""<div style="background:#f6f7f9;padding:16px 0;{font}">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;margin:0 auto">
+<tr><td style="padding:0 12px 10px;font-size:13px;color:#667085">🏠 <b style="color:#16181d">{brand}</b> · nouvelle annonce</td></tr>
+<tr><td style="background:#fff;border:1px solid #e4e7ec;border-radius:14px;overflow:hidden">{photo}
+<div style="padding:16px 18px 18px;color:#16181d">
+<div style="font-size:28px;font-weight:800;line-height:1.1">{rent} €<span style="font-size:14px;font-weight:500;color:#667085"> /mois CC</span></div>
+<div style="font-size:15px;color:#344054;margin-top:4px">{e(facts)}</div>
+<div style="font-size:16px;font-weight:700;margin:8px 0">{where}</div>
+<div>{''.join(badges)}</div>{approx}
+<table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:12px"><tr>{''.join(chips)}</tr></table>
+<a href="{link}" style="display:block;margin-top:14px;background:#3a5bdc;color:#fff;text-align:center;padding:13px;
+border-radius:10px;font-size:16px;font-weight:700;text-decoration:none">Voir l'annonce</a>
+<div style="text-align:center;margin-top:8px">{maps}</div>
+</div></td></tr>
+<tr><td style="padding:14px 6px 0"><div style="font-size:15px;font-weight:700;color:#16181d">Itinéraires</div>{''.join(details)}</td></tr>
+<tr><td style="padding:16px 6px 0;font-size:12px;color:#98a2b3">{e(l.get('source') or '')} · alerte « {e(l.get('alert_name') or '')} » · {brand}</td></tr>
+</table></div>"""
 
 
 def building_info(l):

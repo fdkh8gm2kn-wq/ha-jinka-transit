@@ -615,6 +615,24 @@ class App:
                         free_sms_user=o.get("free_sms_user"), free_sms_key=o.get("free_sms_key"),
                         sender_name=o.get("email_sender_name"))
 
+    def send_sample(self):
+        """Renvoie la dernière annonce retenue, par email seulement, à l'adresse du rapport (aperçu du format)."""
+        self.opts = self.load_options()
+        o = self.opts
+        to = o.get("daily_report_email") or o.get("error_email") or o.get("email_to")
+        n = Notifier(email_to=to, smtp_user=o.get("mail_user") or o.get("jinka_email"),
+                     smtp_password=o.get("mail_password"), smtp_server=o.get("smtp_server"),
+                     sender_name=o.get("email_sender_name"))
+        if not n.email_ok:
+            raise RuntimeError("Email non configuré (adresse du rapport ou boîte dédiée manquante).")
+        done = sorted((v for v in self.state["listings"].values() if v["status"] in ("notified", "match", "silent")),
+                      key=lambda v: v.get("notified_at") or v.get("ts", 0), reverse=True)
+        if not done:
+            raise RuntimeError("Aucune annonce retenue à renvoyer pour l'instant.")
+        v = done[0]
+        ok = n._email(f"[Exemple] {title_of(v['listing'])}", body_of(v), html_of({**v, "brand": self.brand()}))
+        return to, ok
+
     def send_test(self):
         """Bouton « notification de test » : envoie un message sur chaque canal et dit lequel marche."""
         self.opts = self.load_options()

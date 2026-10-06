@@ -737,3 +737,13 @@ print("Interface : vues, suivi, tri ✔")
 assert _web.dest_icon("Travail (Bureau)") == "💼" and _web.dest_icon("École (Campus)") == "🎓"
 assert _web.dest_icon("Gare du Nord") == "🚆" and _web.dest_icon("Arena Nanterre") == "🎤" and _web.dest_icon("Chez mamie") == "Chez mamie"
 print("Icônes des adresses ✔")
+# Exemple d'email d'annonce (aperçu du format)
+sent_mail.clear()
+app.load_options = lambda: app.opts
+app.opts.update({"daily_report_email": "rapport@example.org", "jinka_email": "bot@gmail.com", "mail_password": "x"})
+app.state["listings"]["p12"]["status"] = "notified"
+_to, _ok = app.send_sample()
+_m = [x[1] for x in sent_mail if x[0] == "msg"][-1]
+assert _ok and _to == "rapport@example.org" and _m["Subject"].startswith("[Exemple]")
+assert "Voir l'annonce" in _m.get_body(("html",)).get_content()
+print("Exemple d'email d'annonce ✔")

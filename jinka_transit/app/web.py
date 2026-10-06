@@ -16,7 +16,7 @@ from urllib.parse import parse_qs, urlencode
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from fmt import steps_of, title_of
+from fmt import dest_icon as _dest_icon, steps_of, title_of
 
 log = logging.getLogger("web")
 
@@ -137,16 +137,8 @@ def short_dest(name):
     return m.group(1) if m else (name or "")
 
 
-DEST_ICONS = ((r"travail|bureau|boulot|job|work", "💼"), (r"[ée]cole|fac|univ|campus|lyc[ée]e", "🎓"),
-              (r"gare|train", "🚆"), (r"arena|concert|salle|z[ée]nith|olympia|stade", "🎤"))
-
-
 def dest_icon(name):
-    """Icône d'une adresse (💼 travail, 🎓 école, 🚆 gare, 🎤 salle de concert), sinon son nom court."""
-    for pat, ico in DEST_ICONS:
-        if re.search(pat, name or "", re.I):
-            return ico
-    return html.escape(short_dest(name))
+    return html.escape(_dest_icon(name))
 
 
 def worst_minutes(v):
@@ -396,6 +388,7 @@ def render_settings(app):
     return f"""<div class="card"><b>Dernier scan</b> <span class="muted">{esc(last.get('at') or '—')}</span><br>
 {esc(last.get('status') or '')}{f" <span class='ko'>{esc(last['error'])}</span>" if last.get('error') else ''}
 <div class="row"><form method="post" action="notify/test"><button class="ghost">Envoyer une notification de test</button></form>
+<form method="post" action="notify/sample"><button class="ghost">📧 Recevoir un exemple d'email d'annonce</button></form>
 <a class="btn ghost" href="explore">🗺️ Zones compatibles (recherche élargie)</a></div></div>
 <div class="card"><b>Critères</b><div class="muted">{esc(' · '.join(x for x in crit if x))}</div>
 <div class="muted" style="font-size:12px;margin-top:4px">Modifiables dans Paramètres → Applications → Jinka Transit → Configuration.</div></div>
@@ -514,6 +507,13 @@ def start(app, port=8099):
                     app.flash = " · ".join(
                         f"<span class='{'ok' if ok else 'ko'}'>{'✅' if ok else '❌'} {html.escape(name)}</span>"
                         for name, ok in res) + " <span class='muted'>(détail des erreurs dans le Journal)</span>"
+                except Exception as e:  # noqa: BLE001
+                    app.flash = f"<span class='ko'>{html.escape(str(e))}</span>"
+            elif path.endswith("notify/sample"):
+                try:
+                    to, ok = app.send_sample()
+                    app.flash = (f"<span class='ok'>✅ Exemple d'annonce envoyé à {html.escape(str(to))}</span>" if ok
+                                 else "<span class='ko'>❌ Échec de l'envoi (voir le Journal)</span>")
                 except Exception as e:  # noqa: BLE001
                     app.flash = f"<span class='ko'>{html.escape(str(e))}</span>"
             elif path.endswith("jinka/auto"):
