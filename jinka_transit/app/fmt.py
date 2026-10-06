@@ -134,7 +134,11 @@ def building_info(l):
     """Étage et sécurité de l'immeuble, quand l'annonce les donne (Bien'ici)."""
     parts = []
     if l.get("floor") is not None:
-        parts.append("rez-de-chaussée" if l["floor"] == 0 else "1er étage" if l["floor"] == 1 else f"{l['floor']}e étage")
+        parts.append("rez-de-chaussée" if l["floor"] == 0 else "1er étage" if l["floor"] == 1 else f"{l['floor']:g}e étage")
+    if l.get("elevator") is True:
+        parts.append("ascenseur")
+    elif l.get("elevator") is False:
+        parts.append("sans ascenseur")
     if l.get("safety"):
         parts.append(", ".join(l["safety"]))
     return " · ".join(parts)

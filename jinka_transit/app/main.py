@@ -45,6 +45,20 @@ def floor_from_text(text):
     return None
 
 
+NO_ELEVATOR_RE = re.compile(r"\b(sans|pas d['’]|pas de|aucun)\s*ascenseur", re.I)
+ELEVATOR_RE = re.compile(r"\bascenseur\b", re.I)
+
+
+def has_elevator(listing):
+    """True / False si l'annonce le dit (texte prioritaire s'il dit « sans ascenseur »), None si inconnu."""
+    text = listing.get("description") or ""
+    if NO_ELEVATOR_RE.search(text):
+        return False
+    if listing.get("elevator") is True or ELEVATOR_RE.search(text):
+        return True
+    return listing.get("elevator")
+
+
 class App:
     def __init__(self):
         self.lock = threading.Lock()
@@ -84,7 +98,7 @@ class App:
                           o.get("max_walk_minutes"), o.get("max_rent", 0), o.get("max_walk_home_minutes", 5),
                           "localisation-v2", "marche-destination-30", o.get("min_area", 0),
                           o.get("transfer_penalty_minutes", 3), o.get("max_transfers", 2),
-                          bool(o.get("furnished_only")), int(o.get("max_floor") or 0)],
+                          bool(o.get("furnished_only")), int(o.get("max_floor") or 0), "ascenseur-v1"],
                          sort_keys=True)
         return hashlib.sha1(key.encode()).hexdigest()[:12]
 
@@ -169,7 +183,10 @@ class App:
             if floor is None:
                 floor = floor_from_text(listing.get("description"))
             if floor is not None and floor > max_floor:
-                return f"{int(floor)}e étage (max {max_floor}e)"
+                elevator = has_elevator(listing)
+                if not elevator:  # au-delà du max : gardée seulement avec un ascenseur confirmé
+                    why = "sans ascenseur" if elevator is False else "ascenseur non précisé"
+                    return f"{int(floor)}e étage {why} (max {max_floor}e sans ascenseur)"
         max_rent = int(self.opts.get("max_rent") or 0)
         if max_rent and listing.get("rent") and listing["rent"] > max_rent:
             return f"loyer {int(listing['rent'])} € > {max_rent} €"
@@ -266,7 +283,8 @@ class App:
                 continue
             prev = known.get(l["id"])
             if prev:  # complète les annonces déjà connues (champs ajoutés depuis : DPE, meublé)
-                prev["listing"].update({k: l[k] for k in ("dpe", "furnished") if l.get(k) is not None})
+                prev["listing"].update({k: l[k] for k in ("dpe", "furnished", "floor", "elevator")
+                                        if l.get(k) is not None})
             first_seen = (prev or {}).get("first_seen") or (prev or {}).get("ts") or time.time()
             if prev and prev["status"] in ("notified", "silent", "duplicate"):
                 continue

@@ -39,8 +39,9 @@ configuration:
   max_floor:
     name: Étage maximum
     description: >-
-      0 = pas de limite. Étage lu dans l'annonce (champ du site ou texte « au 5e étage ») ; si l'étage
-      n'est pas indiqué, l'annonce est gardée.
+      0 = pas de limite. Au-delà, l'annonce n'est gardée que si un ascenseur est confirmé (champ du site ou
+      texte). Étage lu dans l'annonce (champ du site ou texte « au 5e étage ») ; si l'étage n'est pas indiqué,
+      l'annonce est gardée.
   furnished_only:
     name: Meublé uniquement
     description: >-

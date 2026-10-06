@@ -104,6 +104,7 @@ def normalize(ad):
         "coliving": is_coliving(ad),
         "furnished": ad.get("isFurnished"),
         "dpe": dpe_letter(ad.get("energyClassification")),
+        "elevator": ad.get("hasElevator") if isinstance(ad.get("hasElevator"), bool) else None,
     }
 
 

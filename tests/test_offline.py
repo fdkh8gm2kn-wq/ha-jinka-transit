@@ -650,10 +650,17 @@ assert main.floor_from_text("situé au 2e et dernier étage") == 2
 assert main.floor_from_text("Immeuble de 6 étages, appartement en rez-de-chaussée") == 0
 assert main.floor_from_text("Bel appartement lumineux") is None
 app.opts.update({"max_floor": 4, "furnished_only": False, "max_rent": 0, "min_area": 0})
-assert app.basic_reject({"floor": 6, "description": ""}) == "6e étage (max 4e)"
+assert app.basic_reject({"floor": 6, "description": ""}) == "6e étage ascenseur non précisé (max 4e sans ascenseur)"
+assert app.basic_reject({"floor": 6, "elevator": True, "description": ""}) is None
+assert app.basic_reject({"floor": 6, "elevator": False, "description": ""}) == "6e étage sans ascenseur (max 4e sans ascenseur)"
+assert app.basic_reject({"floor": 6, "elevator": True, "description": "Studio sans ascenseur"}).startswith("6e étage sans ascenseur")
+assert app.basic_reject({"floor": None, "description": "au 6e étage avec ascenseur"}) is None
 assert app.basic_reject({"floor": 4, "description": ""}) is None
-assert app.basic_reject({"floor": None, "description": "au 7ème étage avec ascenseur"}) == "7e étage (max 4e)"
+assert app.basic_reject({"floor": None, "description": "au 7ème étage, pas d'ascenseur"}).startswith("7e étage sans ascenseur")
 assert app.basic_reject({"floor": None, "description": "proche métro"}) is None  # étage inconnu : gardée
 app.opts["max_floor"] = 0
 assert app.basic_reject({"floor": 9, "description": ""}) is None
-print("Étage maximum ✔")
+import jinka as _jk2
+assert _jk2.normalize({"id": 1, "floor": -1, "lift": None}, "a", "n")["floor"] is None
+assert fmt.building_info({"floor": 6, "elevator": True}) == "6e étage · ascenseur"
+print("Étage maximum (5e et + seulement avec ascenseur) ✔")

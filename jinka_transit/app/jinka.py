@@ -134,8 +134,15 @@ def normalize(ad, alert_id, alert_name):
         "quartier": ad.get("quartier_name"),
         "furnished": ad.get("furnished"),
         "dpe": dpe_letter(ad.get("energy_dpe") or ad.get("dpe")),
-        "floor": _num(ad.get("floor")),
+        "floor": _floor(ad.get("floor")),
+        "elevator": ad.get("lift") if isinstance(ad.get("lift"), bool) else None,
     }
+
+
+def _floor(v):
+    """Étage (Jinka met -1 quand il est inconnu)."""
+    n = _num(v)
+    return n if n is not None and n >= 0 else None
 
 
 def dpe_letter(v):
