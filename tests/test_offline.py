@@ -500,8 +500,8 @@ app.opts["destinations"] = [{"name": "A", "address": "x", "max_minutes": 45, "ar
 p1 = _web.render(app, "all", 1)
 p3 = _web.render(app, "all", 3)
 assert "page 1 / 3 (121 annonces)" in p1 and "suivantes »" in p1 and "« précédentes" not in p1
-assert "page 3 / 3" in p3 and p3.count("<tr><td><a href=") == 21
-assert p1.count("<tr><td><a href=") == 50
+assert "page 3 / 3" in p3 and p3.count("<article") == 21
+assert p1.count("<article") == 50
 assert "page 3 / 3" in _web.render(app, "all", 99)
 app.state["listings"]["p5"]["status"] = "duplicate"
 app.state["listings"]["p6"]["status"] = "notified"
@@ -718,3 +718,19 @@ assert _n._email("t", "corps")
 assert "ALERTES IMMO" in str([m[1]["From"] for m in sent_mail if m[0] == "msg"][-1])
 assert notify.Notifier(email_to="a@b.fr", smtp_user="d@gmail.com", smtp_password="x").sender_name == "Jinka Transit"
 print("Nom de l'expéditeur ✔")
+# Nouvelle interface : vues, suivi, tri
+_any = next(iter(app.state["listings"]))
+app.set_track(_any, "fav")
+assert app.state["track"][_any]["tag"] == "fav"
+for _v in ("list", "track", "map", "settings"):
+    _html = _web.render(app, "all", 1, _v, "prix")
+    assert "<html" in _html and "Mon suivi (1)" in _html, _v
+assert "⭐ Favori (1)" in _web.render(app, "all", 1, "track")
+app.set_track(_any, "fav")  # même tag : retiré
+assert _any not in app.state.get("track", {})
+app.set_track(_any, "visit")
+app.state["listings"][_any]["first_seen"] = time.time() - 40 * 86400
+app.purge_old_listings()
+assert _any in app.state["listings"]  # suivie : jamais supprimée
+assert _web.short_dest("Travail (Bureau)") == "Bureau" and _web.short_dest("Gare du Nord") == "Gare du Nord"
+print("Interface : vues, suivi, tri ✔")

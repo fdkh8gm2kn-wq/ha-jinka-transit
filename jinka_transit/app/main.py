@@ -113,7 +113,10 @@ class App:
         """Supprime les annonces détectées il y a plus de 30 jours (seul l'identifiant est gardé)."""
         now = now or time.time()
         forgotten = self.state.setdefault("forgotten", {})
+        followed = {k for k, t in self.state.get("track", {}).items() if t.get("tag") != "drop"}
         for k, v in list(self.state["listings"].items()):
+            if k in followed:  # annonces suivies (favori, contactée, visite) : jamais supprimées
+                continue
             if now - v.get("first_seen", v.get("ts", now)) > LISTING_TTL:
                 forgotten[k] = now
                 del self.state["listings"][k]
@@ -580,6 +583,24 @@ class App:
             if v["status"] in ("notified", "match", "silent", "rejected") and bienici.same_flat(listing, other):
                 return v
         return None
+
+    TRACK_TAGS = ("fav", "contact", "visit", "drop")
+
+    def set_track(self, listing_id, tag):
+        """Suivi d'une annonce (⭐ favori, 📞 contactée, 🏠 visite, ❌ écartée). Même tag = on retire."""
+        if listing_id not in self.state["listings"] or tag not in self.TRACK_TAGS + ("",):
+            return
+        track = self.state.setdefault("track", {})
+        if not tag or track.get(listing_id, {}).get("tag") == tag:
+            track.pop(listing_id, None)
+        else:
+            track[listing_id] = {"tag": tag, "ts": time.time()}
+        # pendant un scan, l'état est enregistré à la fin du scan : on n'attend pas
+        if self.lock.acquire(timeout=1):
+            try:
+                self.save_state()
+            finally:
+                self.lock.release()
 
     def brand(self):
         """Nom affiché dans les emails (expéditeur et objets)."""

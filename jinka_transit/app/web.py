@@ -1,11 +1,14 @@
 """Mini interface web (onglet dans Home Assistant via Ingress, ou http://localhost:8099 en local)."""
 
+import hashlib
 import html
 import json
 import os
+import re
 import threading
+import time
 from string import Template
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, urlencode
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -14,40 +17,6 @@ from fmt import steps_of, title_of
 STATUS_LABEL = {"duplicate": "↔️ doublon", "notified": "✅ envoyée", "match": "⏳ OK, envoi en attente",
                 "silent": "✅ OK (1er scan, non envoyée)", "rejected": "❌ refusée",
                 "pending": "⏳ calcul en attente"}
-
-PAGE = Template("""<!doctype html><html lang="fr"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>Jinka Transit</title>
-<style>
-:root{--bg:#fafafa;--fg:#1c1c1c;--muted:#666;--line:#e3e3e3;--card:#fff;--ok:#1a7f37;--ko:#b42318;--accent:#0b63ce}
-@media (prefers-color-scheme:dark){:root{--bg:#111;--fg:#eee;--muted:#9a9a9a;--line:#2a2a2a;--card:#1a1a1a;--ok:#4ac26b;--ko:#f97066;--accent:#5aa2ff}}
-body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 system-ui,-apple-system,sans-serif}
-main{max-width:1100px;margin:0 auto;padding:16px}
-h1{font-size:20px;margin:0 0 4px}.muted{color:var(--muted)}
-.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:12px 0}
-table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:7px 6px;border-top:1px solid var(--line);vertical-align:top}
-th{font-weight:600;color:var(--muted);border-top:0}.ok{color:var(--ok)}.ko{color:var(--ko)}
-a{color:var(--accent)}button{font:inherit;padding:7px 14px;border-radius:8px;border:1px solid var(--accent);
-background:var(--accent);color:#fff;cursor:pointer}.wrap{overflow-x:auto}
-.filters a{margin-right:10px}
-.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.row input{font:inherit;padding:7px 10px;border-radius:8px;
-border:1px solid var(--line);background:var(--bg);color:var(--fg);min-width:0;flex:1 1 200px}
-.flash{padding:10px 14px;border-radius:10px;margin:12px 0;border:1px solid var(--line);background:var(--card)}
-</style></head><body><main>
-<h1>Jinka Transit</h1>
-<div class="muted">Annonces Jinka filtrées par trajet en transports lourds (sans bus) ·
-<a href="explore">🗺️ Zones compatibles (recherche élargie)</a></div>
-${flash}<div class="card"><b>Connexion Jinka :</b> ${jinka_status}
-<form method="post" action="jinka/send" class="row"><input type="email" name="email" value="${jinka_email}"
- placeholder="ton email Jinka" required><button>Recevoir un code</button></form>${code_form}${auto_form}</div>
-<div class="card"><b>Dernier scan :</b> ${last_at} — ${last_status}${last_error}
-<form method="post" action="scan" style="display:inline;margin-left:12px"><button>Scanner maintenant</button></form>
-<form method="post" action="notify/test" style="display:inline;margin-left:8px"><button>Envoyer une notification de test</button></form></div>
-<div class="card"><b>Adresses</b><table><tr><th>Nom</th><th>Adresse saisie</th><th>Localisée à</th><th>Max</th><th>Arrivée</th></tr>${dests}</table>
-<div class="muted">Loyer max : ${rent} · surface min : ${area} · Modes autorisés : ${modes} · marche max logement → station : ${home_walk} min · trajet tout à pied accepté jusqu'à ${walk} min</div></div>
-<div class="card"><div class="filters">Afficher : ${filters} <span class="muted">· les annonces sont retirées 30 jours après leur détection</span></div>${pager}<div class="wrap"><table>
-<tr><th>Annonce</th><th>Statut</th><th>Trajets</th><th>Vue le</th></tr>${rows}</table></div>${pager}</div>
-</main></body></html>""")
-
 
 def safe_json(obj):
     """JSON utilisable dans une balise <script> (impossible d'en sortir avec « </script> »)."""
@@ -73,50 +42,314 @@ FILTERS = {  # clé d'URL : (libellé, statuts affichés)
 DEFAULT_FILTER = "ok"
 
 
-def render(app, flt=DEFAULT_FILTER, page=1):
+CSS = """
+:root{--bg:#f6f7f9;--fg:#16181d;--muted:#667085;--line:#e4e7ec;--card:#fff;--ok:#12805c;--okbg:#e7f6ef;
+--ko:#b42318;--kobg:#fdecea;--warn:#a15c07;--warnbg:#fef4e2;--accent:#3a5bdc;--accentbg:#eef2ff;--chip:#f2f4f7}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1115;--fg:#e9ebef;--muted:#98a2b3;--line:#262a33;--card:#171a20;
+--ok:#4ade9b;--okbg:#10291f;--ko:#f97066;--kobg:#2d1414;--warn:#f5b546;--warnbg:#2b2110;--accent:#8ea2ff;--accentbg:#1b2140;--chip:#20242c}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:1180px;margin:0 auto;padding:16px}a{color:var(--accent)}.muted{color:var(--muted)}.ok{color:var(--ok)}.ko{color:var(--ko)}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+h1{font-size:20px;margin:0;letter-spacing:-.01em}
+nav.tabs{display:flex;gap:4px;flex-wrap:wrap;margin:12px 0 10px;border-bottom:1px solid var(--line)}
+nav.tabs a{padding:8px 12px;text-decoration:none;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px}
+nav.tabs a.on{color:var(--fg);border-color:var(--accent);font-weight:600}
+.status{display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:var(--card);border:1px solid var(--line);
+border-radius:12px;padding:10px 14px}.status .sep{color:var(--line)}
+button,.btn{font:inherit;padding:7px 14px;border-radius:9px;border:1px solid var(--accent);background:var(--accent);color:#fff;cursor:pointer;text-decoration:none}
+.btn.ghost,button.ghost{background:transparent;color:var(--accent)}
+.toolbar{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:14px 0 6px;align-items:center}
+.pills{display:flex;gap:6px;flex-wrap:wrap}.pills a{padding:5px 11px;border-radius:999px;background:var(--chip);color:var(--fg);text-decoration:none;font-size:13px}
+.pills a.on{background:var(--accent);color:#fff}
+.sort{font-size:13px}.sort a{margin-left:8px;text-decoration:none}.sort a.on{font-weight:700;text-decoration:underline}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+.ad{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden;display:flex;flex-direction:column}
+.ad.t-fav{outline:2px solid #f5b546}.ad.t-visit{outline:2px solid var(--accent)}.ad.t-contact{outline:2px solid var(--ok)}
+.ad.t-drop{opacity:.55}
+.ph{display:block;height:170px;background:var(--chip);position:relative}
+.ph img{width:100%;height:100%;object-fit:cover;display:block}
+.ph .none{display:flex;height:100%;align-items:center;justify-content:center;font-size:42px;color:var(--muted)}
+.ph .tag{position:absolute;top:8px;left:8px;background:rgba(0,0,0,.65);color:#fff;font-size:12px;padding:2px 8px;border-radius:999px}
+.ph .src{position:absolute;bottom:8px;left:8px;background:rgba(0,0,0,.55);color:#fff;font-size:11px;padding:2px 7px;border-radius:6px}
+.body{padding:10px 12px 12px;display:flex;flex-direction:column;gap:7px;flex:1}
+.price{font-size:20px;font-weight:700}.top{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.where{font-weight:600}.where .q{font-weight:400;color:var(--muted)}
+.badges{display:flex;gap:5px;flex-wrap:wrap}.b{font-size:12px;padding:2px 7px;border-radius:6px;background:var(--chip)}
+.b.warn{background:var(--warnbg);color:var(--warn)}.b.nm{background:var(--accentbg);color:var(--accent);font-weight:600}
+.dpe{font-weight:700;color:#111}.dpe.A{background:#009c6d;color:#fff}.dpe.B{background:#52b153;color:#fff}.dpe.C{background:#a3cf5e}
+.dpe.D{background:#f6e04b}.dpe.E{background:#f0b40f}.dpe.F{background:#eb8235;color:#fff}.dpe.G{background:#d7221f;color:#fff}
+.trips{display:flex;gap:6px;flex-wrap:wrap}.trip{font-size:13px;padding:3px 8px;border-radius:8px;background:var(--okbg);color:var(--ok)}
+.trip.ko{background:var(--kobg);color:var(--ko)}.trip small{opacity:.8}
+.why{font-size:13px;color:var(--ko)}
+details{font-size:13px}summary{cursor:pointer;color:var(--muted)}details .it{white-space:pre-line;color:var(--muted);margin:4px 0 8px}
+.foot{display:flex;justify-content:space-between;align-items:center;gap:6px;margin-top:auto;padding-top:4px;flex-wrap:wrap}
+.acts{display:flex;gap:4px}.acts form{margin:0}.acts button{padding:4px 8px;background:var(--chip);border:1px solid var(--line);color:var(--fg);font-size:15px;line-height:1}
+.acts button.on{background:var(--accentbg);border-color:var(--accent)}
+.st{font-size:12px}.pager{margin:14px 0;display:flex;gap:12px;align-items:center;justify-content:center}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:12px 0}
+.card table{width:100%;border-collapse:collapse}.card th,.card td{text-align:left;padding:7px 6px;border-top:1px solid var(--line);vertical-align:top}
+.card th{color:var(--muted);border-top:0;font-weight:600}.wrap{overflow-x:auto}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.row input{font:inherit;padding:7px 10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--fg);flex:1 1 200px;min-width:0}
+.flash{padding:10px 14px;border-radius:10px;margin:12px 0;border:1px solid var(--line);background:var(--card)}
+h2{font-size:16px;margin:18px 0 8px}#map{height:70vh;min-height:380px;border-radius:12px}
+.empty{padding:30px;text-align:center;color:var(--muted);background:var(--card);border:1px dashed var(--line);border-radius:12px}
+@media (max-width:600px){main{padding:10px}.ph{height:150px}.price{font-size:18px}}
+"""
+
+PAGE = Template("""<!doctype html><html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>${brand}</title>${head}
+<style>${css}</style></head><body><main>
+<header><h1>🏠 ${brand}</h1><form method="post" action="scan"><button>Scanner maintenant</button></form></header>
+<nav class="tabs">${tabs}</nav>
+${flash}<div class="status">${status}</div>
+${content}
+</main></body></html>""")
+
+TRACK = {"fav": ("⭐", "Favori"), "contact": ("📞", "Contactée"), "visit": ("🏠", "Visite prévue"), "drop": ("❌", "Pas pour nous")}
+SORTS = {"recent": "plus récentes", "prix": "prix", "trajet": "trajet", "surface": "surface"}
+DPE_OK = set("ABCDEFG")
+
+
+def ago(ts):
+    if not ts:
+        return "—"
+    d = time.time() - ts
+    if d < 90:
+        return "à l'instant"
+    if d < 3600:
+        return f"il y a {int(d // 60)} min"
+    if d < 86400:
+        return f"il y a {int(d // 3600)} h"
+    if d < 2 * 86400:
+        return "hier"
+    return datetime.fromtimestamp(ts).strftime("%d/%m")
+
+
+def short_dest(name):
+    m = re.search(r"\(([^)]+)\)", name or "")
+    return m.group(1) if m else (name or "")
+
+
+def worst_minutes(v):
+    vals = [r.get("counted") or r.get("minutes") for r in v.get("results", [])
+            if not r.get("info_only") and r.get("minutes") is not None]
+    return max(vals) if vals else None
+
+
+def sort_items(items, sort):
+    big = 10 ** 9
+    if sort == "prix":
+        return sorted(items, key=lambda v: v["listing"].get("rent") or big)
+    if sort == "trajet":
+        return sorted(items, key=lambda v: worst_minutes(v) or big)
+    if sort == "surface":
+        return sorted(items, key=lambda v: -(v["listing"].get("area") or 0))
+    return sorted(items, key=lambda v: v.get("first_seen") or v.get("ts", 0), reverse=True)
+
+
+def link(view="list", **q):
+    q = {"v": view, **{k: val for k, val in q.items() if val not in (None, "")}}
+    return "?" + urlencode(q)
+
+
+def card(v, tag, back, esc=html.escape):
+    l = v["listing"]
+    lid = l["id"]
+    img = (f"<img loading='lazy' referrerpolicy='no-referrer' src='{esc(l['image'])}' alt=''>"
+           if l.get("image") and str(l["image"]).startswith("http") else "<div class='none'>🏠</div>")
+    first = v.get("first_seen") or v.get("ts", 0)
+    new = "<span class='tag'>nouveau</span>" if time.time() - first < 86400 and v["status"] != "rejected" else ""
+    src = esc((l.get("source") or l.get("alert_name") or "").split(" · ")[0])
+    facts = " · ".join(x for x in (f"{l['area']:g} m²" if l.get("area") else "",
+                                   f"{int(l['rooms'])} p." if l.get("rooms") else "") if x)
+    badges = []
+    if l.get("dpe") in DPE_OK:
+        badges.append(f"<span class='b dpe {l['dpe']}'>DPE {l['dpe']}</span>")
+    if l.get("furnished") is False:
+        badges.append("<span class='b nm'>📦 Non meublé</span>")
+    elif l.get("furnished"):
+        badges.append("<span class='b'>Meublé</span>")
+    if l.get("floor") is not None:
+        fl = "RDC" if l["floor"] == 0 else f"{l['floor']:g}e étage"
+        if l.get("elevator") is True:
+            fl += " · ascenseur"
+        badges.append(f"<span class='b'>{fl}</span>")
+    if l.get("approx"):
+        badges.append(f"<span class='b warn' title='{esc(str(l['approx']))}'>⚠️ position estimée</span>")
+    trips, infos = [], []
+    for r in v.get("results", []):
+        if r.get("minutes") is None:
+            continue
+        steps = esc("\n".join(x.strip().replace("*", "") for x in steps_of(r)))
+        line = (f"<b>{esc(r['name'])}</b> — {r['minutes']} min{short_counted(r)} · {esc(r.get('summary') or '')}"
+                f"<div class='it'>{steps}</div>")
+        if r.get("info_only"):
+            infos.append(line)
+            continue
+        extra = f" <small>(compté {r['counted']})</small>" if r.get("counted") and r["counted"] != r["minutes"] else ""
+        trips.append(f"<span class='trip{'' if r.get('ok') else ' ko'}' title='{esc(r.get('summary') or '')}'>"
+                     f"{esc(short_dest(r['name']))} {r['minutes']}'{extra}</span>")
+        infos.insert(0, line)
+    why = (f"<div class='why'>{esc(v.get('reason') or '')}</div>"
+           if v["status"] in ("rejected", "duplicate", "pending") and v.get("reason") else "")
+    anchor = "a" + hashlib.sha1(lid.encode()).hexdigest()[:10]
+    acts = "".join(
+        f"<form method='post' action='track'><input type='hidden' name='id' value='{esc(lid)}'>"
+        f"<input type='hidden' name='tag' value='{k}'><input type='hidden' name='back' value='{esc(back)}#{anchor}'>"
+        f"<button class='{'on' if tag == k else ''}' title='{lbl}'>{ico}</button></form>"
+        for k, (ico, lbl) in TRACK.items())
+    return (f"<article class='ad t-{tag or 'none'}' id='{anchor}'>"
+            f"<a class='ph' href='{esc(l.get('link') or '#')}' target='_blank' rel='noopener'>{img}{new}<span class='src'>{src}</span></a>"
+            f"<div class='body'><div class='top'><span class='price'>{int(l['rent']) if l.get('rent') else '?'} €</span>"
+            f"<span class='muted'>{facts}</span></div>"
+            f"<div class='where'>{esc(l.get('city') or '')} <span class='q'>{esc(l.get('postal_code') or '')}"
+            f"{' · ' + esc(l['quartier']) if l.get('quartier') else ''}</span></div>"
+            f"<div class='badges'>{''.join(badges)}</div>"
+            f"<div class='trips'>{''.join(trips)}</div>{why}"
+            + (f"<details><summary>Itinéraires</summary>{''.join(infos)}</details>" if infos else "")
+            + f"<div class='foot'><span class='st muted'>{STATUS_LABEL.get(v['status'], v['status'])} · {ago(first)}</span>"
+            f"<div class='acts'>{acts}</div></div></div></article>")
+
+
+def render(app, flt=DEFAULT_FILTER, page=1, view="list", sort="recent"):
+    esc = html.escape
+    st = app.state
+    listings = st.get("listings", {})
+    track = {k: t for k, t in st.get("track", {}).items() if k in listings}
+    tag_of = lambda v: (track.get(v["listing"]["id"]) or {}).get("tag")
+    items = list(listings.values())
+    ok_items = [v for v in items if FILTERS["ok"][1](v["status"])]
+    new24 = sum(1 for v in ok_items if time.time() - (v.get("first_seen") or v.get("ts", 0)) < 86400)
+    n_follow = sum(1 for t in track.values() if t["tag"] != "drop")
+    tabs = "".join(
+        f"<a class='{'on' if view == k else ''}' href='{link(k)}'>{lbl}</a>"
+        for k, lbl in (("list", "Annonces"), ("track", f"⭐ Mon suivi ({n_follow})"), ("map", "🗺️ Carte"),
+                       ("settings", "⚙️ Réglages")))
+    last = app.last_scan
+    try:
+        last_ts = datetime.fromisoformat(last["at"]).timestamp() if last.get("at") else None
+    except ValueError:
+        last_ts = None
+    quota = (st.get("idfm_quota") or {}).get("until", 0)
+    status = [f"<span>Dernier scan <b>{ago(last_ts)}</b></span>",
+              f"<span class='ok'><b>{len(ok_items)}</b> annonces OK</span>",
+              f"<span><b>{new24}</b> nouvelle{'s' if new24 > 1 else ''} en 24 h</span>"]
+    if last.get("error"):
+        status.append(f"<span class='ko'>⚠️ {esc(last['error'])[:160]}</span>")
+    if quota > time.time():
+        status.append(f"<span class='muted'>quota IDFM atteint, reprise {datetime.fromtimestamp(quota):%d/%m %H:%M}</span>")
+    status_html = " <span class='sep'>|</span> ".join(status)
+    flash, app.flash = app.flash, ""
+    if app.auto_test_running:
+        flash = ("⏳ Connexion automatique en cours : code demandé à Jinka, lecture de la boîte mail…"
+                 "<script>setTimeout(()=>location.reload(),5000)</script>")
+    head = ""
+    if view == "settings":
+        content = render_settings(app)
+    elif view == "map":
+        head = ('<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">'
+                '<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>')
+        content = render_map(app, ok_items + [v for v in items if tag_of(v) in ("fav", "contact", "visit")
+                                              and v not in ok_items], tag_of)
+    elif view == "track":
+        sections = []
+        for k, (ico, lbl) in TRACK.items():
+            sel = sort_items([v for v in items if tag_of(v) == k], "recent")
+            if not sel:
+                continue
+            grid = "".join(card(v, k, link("track")) for v in sel)
+            body = f"<div class='grid'>{grid}</div>"
+            sections.append(f"<details><summary><h2 style='display:inline'>{ico} {lbl} ({len(sel)})</h2></summary>{body}</details>"
+                            if k == "drop" else f"<h2>{ico} {lbl} ({len(sel)})</h2>{body}")
+        content = "".join(sections) or (
+            "<div class='empty' style='margin-top:14px'>Rien de suivi pour l'instant.<br>Sur une annonce, clique "
+            "⭐ (favori), 📞 (contactée) ou 🏠 (visite prévue) pour la retrouver ici.</div>")
+    else:
+        counts = {k: sum(1 for v in items if FILTERS[k][1](v["status"]) and
+                         (k not in ("ok", "wait") or tag_of(v) != "drop")) for k in FILTERS}
+        sel = [v for v in items if FILTERS[flt][1](v["status"]) and (flt not in ("ok", "wait") or tag_of(v) != "drop")]
+        sel = sort_items(sel, sort)
+        pages = max(1, -(-len(sel) // PAGE_SIZE))
+        page = min(max(1, page), pages)
+        total = len(sel)
+        sel = sel[(page - 1) * PAGE_SIZE:page * PAGE_SIZE]
+        back = link("list", f=flt, s=sort, p=page if page > 1 else None)
+        pills = "".join(f"<a class='{'on' if flt == k else ''}' href='{link('list', f=k, s=sort)}'>"
+                        f"{FILTERS[k][0]} ({counts[k]})</a>" for k in FILTERS)
+        sorts = "".join(f"<a class='{'on' if sort == k else ''}' href='{link('list', f=flt, s=k)}'>{lbl}</a>"
+                        for k, lbl in SORTS.items())
+        nav = [f"<a href='{link('list', f=flt, s=sort, p=page - 1)}'>« précédentes</a>" if page > 1 else "",
+               f"page {page} / {pages} ({total} annonces)",
+               f"<a href='{link('list', f=flt, s=sort, p=page + 1)}'>suivantes »</a>" if page < pages else ""]
+        pager = f"<div class='pager'>{' · '.join(x for x in nav if x)}</div>"
+        grid = "".join(card(v, tag_of(v), back) for v in sel)
+        dropped = sum(1 for v in items if tag_of(v) == "drop")
+        content = (f"<div class='toolbar'><div class='pills'>{pills}</div><div class='sort muted'>Trier :{sorts}</div></div>"
+                   + (f"<div class='muted' style='font-size:12px'>{dropped} annonce(s) écartée(s) par toi masquée(s) "
+                      f"(voir <a href='{link('track')}'>Mon suivi</a>) · retirées 30 jours après détection, sauf suivies</div>"
+                      if dropped else "<div class='muted' style='font-size:12px'>Les annonces sont retirées 30 jours "
+                      "après leur détection, sauf celles que tu suis.</div>")
+                   + pager + (f"<div class='grid'>{grid}</div>" if grid else "<div class='empty'>Rien pour l'instant</div>")
+                   + pager)
+    return PAGE.substitute(brand=esc(app.brand()) if hasattr(app, "brand") else "Jinka Transit", head=head, css=CSS,
+                           tabs=tabs, flash=f"<div class='flash'>{flash}</div>" if flash else "",
+                           status=status_html, content=content)
+
+
+def render_map(app, items, tag_of):
+    esc = html.escape
+    pts = []
+    for v in items:
+        l = v["listing"]
+        if l.get("lat") is None or l.get("lng") is None:
+            continue
+        w = worst_minutes(v)
+        pts.append({"lat": l["lat"], "lon": l["lng"], "w": w, "t": tag_of(v) or "",
+                    "h": (f"<b>{int(l['rent']) if l.get('rent') else '?'} € · {esc(str(l.get('area') or '?'))} m²</b><br>"
+                          f"{esc(l.get('city') or '')}<br>"
+                          + " · ".join(esc(f"{short_dest(r['name'])} {r['minutes']}'") for r in v.get("results", [])
+                                       if not r.get("info_only") and r.get("minutes") is not None)
+                          + f"<br><a href='{esc(l.get('link') or '#')}' target='_blank' rel='noopener'>voir l'annonce</a>"
+                          + ("<br>⚠️ position estimée" if l.get("approx") else ""))})
+    geo = app.state.get("geocode", {})
+    dpts = []
+    for d in app.opts.get("destinations", []):
+        g = geo.get((d.get("address") or "").strip()) or {}
+        if g.get("lat") is not None:
+            dpts.append({"n": esc(d["name"]), "lat": g["lat"], "lon": g.get("lon")})
+    if not pts:
+        return "<div class='empty' style='margin-top:14px'>Aucune annonce localisée à afficher.</div>"
+    return f"""<div class="card" style="padding:6px"><div id="map"></div></div>
+<div class="muted" style="font-size:12px">Couleur = trajet le plus long vers tes adresses (compté avec les correspondances) :
+<span style="color:#12805c">● ≤ 35 min</span> <span style="color:#d4a106">● 36–45 min</span> <span style="color:#b42318">● au-delà</span> ·
+⭐ = suivie. Les positions estimées sont approximatives.</div>
+<script>
+const pts={safe_json(pts)}, dpts={safe_json(dpts)};
+const map=L.map('map');
+L.tileLayer('https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2'
+ +'&STYLE=normal&TILEMATRIXSET=PM&FORMAT=image/png&TILEMATRIX={{z}}&TILEROW={{y}}&TILECOL={{x}}',
+ {{maxZoom:18,attribution:'© IGN Géoplateforme'}}).addTo(map);
+const b=[];
+pts.forEach(p=>{{b.push([p.lat,p.lon]);const c=p.w==null?'#667085':p.w<=35?'#12805c':p.w<=45?'#d4a106':'#b42318';
+ L.circleMarker([p.lat,p.lon],{{radius:p.t?10:7,color:p.t?'#f5b546':'#fff',weight:p.t?3:1,fillColor:c,fillOpacity:.9}})
+  .bindPopup(p.h).addTo(map)}});
+dpts.forEach(d=>{{b.push([d.lat,d.lon]);L.marker([d.lat,d.lon]).bindTooltip(d.n,{{permanent:true}}).addTo(map)}});
+map.fitBounds(b,{{padding:[20,20]}});
+</script>"""
+
+
+def render_settings(app):
     esc = html.escape
     st = app.state
     geocache = st.get("geocode", {})
     dests = "".join(
-        f"<tr><td>{esc(d['name'])}</td><td>{esc(d['address'])}</td>"
+        f"<tr><td>{esc(d['name'])}{' <span class=muted>(info)</span>' if d.get('info_only') else ''}</td>"
+        f"<td>{esc(d['address'])}</td>"
         f"<td>{esc((geocache.get(d['address'].strip()) or {}).get('label') or '— (au prochain scan)')}</td>"
-        f"<td>{d['max_minutes']} min</td><td>{esc(d['arrival_time'])}</td></tr>"
+        f"<td>{'—' if d.get('info_only') else str(d['max_minutes']) + ' min'}</td><td>{esc(d['arrival_time'])}</td></tr>"
         for d in app.opts["destinations"]) or "<tr><td colspan=5>Aucune adresse configurée</td></tr>"
-
-    items = sorted(st.get("listings", {}).values(), key=lambda v: v.get("ts", 0), reverse=True)
-    counts = {k: sum(1 for v in items if FILTERS[k][1](v["status"])) for k in FILTERS}
-    items = [v for v in items if FILTERS[flt][1](v["status"])]
-    pages = max(1, -(-len(items) // PAGE_SIZE))
-    page = min(max(1, page), pages)
-    total = len(items)
-    items = items[(page - 1) * PAGE_SIZE:page * PAGE_SIZE]
-    rows = []
-    for v in items:
-        l = v["listing"]
-        trips = "<br>".join(
-            f"<span class='{'muted' if r.get('info_only') else 'ok' if r['ok'] else 'ko'}'>"
-            f"{esc(r['name'])}{' (info)' if r.get('info_only') else ''} : "
-            f"{r['minutes'] if r.get('minutes') is not None else '—'} min{short_counted(r)}</span> "
-            f"<span class='muted'>{esc(r.get('summary') or r.get('reason') or '')}</span>"
-            + (f"<details><summary class='muted'>itinéraire</summary><div class='muted' style='white-space:pre-line'>"
-               f"{esc(chr(10).join(x.strip().replace('*', '') for x in steps_of(r)))}</div></details>"
-               if r.get("steps") else "")
-            for r in v.get("results", [])) or f"<span class='ko'>{esc(v.get('reason', ''))}</span>"
-        cls = "ko" if v["status"] == "rejected" else "muted" if v["status"] in ("duplicate", "pending") else "ok"
-        rows.append(
-            f"<tr><td><a href='{esc(l['link'])}' target='_blank' rel='noopener'>{esc(title_of(l))}</a>"
-            f"<div class='muted'>{esc(l.get('source') or '')} · {esc(l.get('alert_name') or '')}</div></td>"
-            f"<td class='{cls}'>{STATUS_LABEL.get(v['status'], v['status'])}</td><td>{trips}</td>"
-            f"<td class='muted'>{datetime.fromtimestamp(v.get('ts', 0)).strftime('%d/%m %H:%M')}</td></tr>")
-    filters = " ".join(
-        f"<a href='?f={k}'{' style=font-weight:700' if flt == k else ''}>{label}</a>"
-        for k, label in ((k, f"{FILTERS[k][0]} ({counts[k]})") for k in FILTERS))
-    nav = [f"<a href='?f={esc(flt)}&p={page - 1}'>« précédentes</a>" if page > 1 else "",
-           f"page {page} / {pages} ({total} annonces)",
-           f"<a href='?f={esc(flt)}&p={page + 1}'>suivantes »</a>" if page < pages else ""]
-    pager = f"<div class='filters'>{' · '.join(x for x in nav if x)}</div>"
     last = app.last_scan
-    auth = app.state.get("jinka_auth") or {}
+    auth = st.get("jinka_auth") or {}
     if app.opts.get("jinka_token"):
         jinka_status = "<span class='ok'>jeton fourni dans la configuration</span>"
     elif auth.get("token"):
@@ -128,27 +361,28 @@ def render(app, flt=DEFAULT_FILTER, page=1):
                  f"<form method='post' action='jinka/verify' class='row'><input name='code' inputmode='numeric' "
                  f"pattern='[0-9]{{4}}' maxlength='4' placeholder='code à 4 chiffres reçu sur "
                  f"{esc(app.login_email)}' required autofocus><button>Valider</button></form>")
-    flash, app.flash = app.flash, ""
-    if app.auto_test_running:
-        flash = ("⏳ Connexion automatique en cours : code demandé à Jinka, lecture de la boîte mail…"
-                 "<script>setTimeout(()=>location.reload(),5000)</script>")
-    return PAGE.substitute(
-        flash=f"<div class='flash'>{flash}</div>" if flash else "",
-        jinka_status=jinka_status, code_form=code_form,
-        auto_form=("" if not (app.opts.get("jinka_email") and app.opts.get("mail_password")) else
-                   "<form method='post' action='jinka/auto' class='row'><button>🔄 Tester la connexion automatique"
-                   f" ({esc(app.opts['jinka_email'])})</button><span class='muted'>demande un code, le lit dans "
-                   "la boîte mail et se connecte (≈ 30 s)</span></form>"),
-        jinka_email=esc(app.login_email or auth.get("email") or app.opts.get("jinka_email") or ""),
-        last_at=esc(last["at"] or "—"), last_status=esc(last["status"]),
-        last_error=f" <span class='ko'>{esc(last['error'])}</span>" if last.get("error") else "",
-        dests=dests, modes=esc(", ".join(app.opts.get("allowed_modes") or [])),
-        walk=app.opts.get("max_walk_minutes", 15), filters=filters,
-        home_walk=app.opts.get("max_walk_home_minutes", 5),
-        rent=f"{app.opts['max_rent']} €" if app.opts.get("max_rent") else "aucun",
-        area=f"{app.opts['min_area']} m²" if app.opts.get("min_area") else "aucune",
-        pager=pager,
-        rows="".join(rows) or "<tr><td colspan=4 class='muted'>Rien pour l'instant</td></tr>")
+    auto_form = ("" if not (app.opts.get("jinka_email") and app.opts.get("mail_password")) else
+                 "<form method='post' action='jinka/auto' class='row'><button class='ghost'>🔄 Tester la connexion "
+                 f"automatique ({esc(app.opts['jinka_email'])})</button><span class='muted'>demande un code, le lit "
+                 "dans la boîte mail et se connecte (≈ 30 s)</span></form>")
+    o = app.opts
+    crit = [f"loyer max {o['max_rent']} €" if o.get("max_rent") else "",
+            f"surface min {o['min_area']} m²" if o.get("min_area") else "",
+            "meublé uniquement" if o.get("furnished_only") else "meublé ou non",
+            f"étage max {o['max_floor']} (au-delà : avec ascenseur)" if o.get("max_floor") else "",
+            f"marche logement → station ≤ {o.get('max_walk_home_minutes', 5)} min",
+            f"correspondances ≤ {o.get('max_transfers', 2)}, +{o.get('transfer_penalty_minutes', 3)} min chacune",
+            "modes : " + ", ".join(o.get("allowed_modes") or [])]
+    return f"""<div class="card"><b>Dernier scan</b> <span class="muted">{esc(last.get('at') or '—')}</span><br>
+{esc(last.get('status') or '')}{f" <span class='ko'>{esc(last['error'])}</span>" if last.get('error') else ''}
+<div class="row"><form method="post" action="notify/test"><button class="ghost">Envoyer une notification de test</button></form>
+<a class="btn ghost" href="explore">🗺️ Zones compatibles (recherche élargie)</a></div></div>
+<div class="card"><b>Critères</b><div class="muted">{esc(' · '.join(x for x in crit if x))}</div>
+<div class="muted" style="font-size:12px;margin-top:4px">Modifiables dans Paramètres → Applications → Jinka Transit → Configuration.</div></div>
+<div class="card"><b>Adresses</b><div class="wrap"><table><tr><th>Nom</th><th>Adresse saisie</th><th>Localisée à</th><th>Max</th><th>Arrivée</th></tr>{dests}</table></div></div>
+<div class="card"><b>Connexion Jinka :</b> {jinka_status}
+<form method="post" action="jinka/send" class="row"><input type="email" name="email" value="{esc(app.login_email or auth.get('email') or o.get('jinka_email') or '')}"
+ placeholder="ton email Jinka" required><button>Recevoir un code</button></form>{code_form}{auto_form}</div>"""
 
 
 INGRESS_IP = "172.30.32.2"  # seul client autorisé dans HA : le proxy Ingress (déjà authentifié par HA)
@@ -190,7 +424,9 @@ def start(app, port=8099):
             q = {k: v[0] for k, v in parse_qs(query).items()}
             flt = q["f"] if q.get("f") in FILTERS else DEFAULT_FILTER
             page = int(q["p"]) if q.get("p", "").isdigit() else 1
-            self._send(200, render(app, flt, page))
+            view = q["v"] if q.get("v") in ("list", "track", "map", "settings") else "list"
+            sort = q["s"] if q.get("s") in SORTS else "recent"
+            self._send(200, render(app, flt, page, view, sort))
 
         def do_POST(self):
             if not self._allowed():
@@ -198,6 +434,14 @@ def start(app, port=8099):
             path = self.path.rstrip("/")
             length = int(self.headers.get("Content-Length") or 0)
             form = {k: v[0] for k, v in parse_qs(self.rfile.read(length).decode()).items()}
+            if path.endswith("track"):
+                app.set_track(form.get("id", ""), form.get("tag", ""))
+                back = form.get("back", "")
+                back = back if back.startswith("?") else "?"
+                self.send_response(303)
+                self.send_header("Location", "./" + back)
+                self.end_headers()
+                return
             if path.endswith("scan"):
                 app.scan_now.set()
             elif path.endswith("jinka/send"):
@@ -231,7 +475,8 @@ def start(app, port=8099):
                                       max(10, min(180, int(form.get("max_minutes") or 45))))
                 except Exception as e:  # noqa: BLE001
                     app.explore_progress = {"error": str(e)}
-            redirect = "../" if ("/jinka/" in self.path or "/notify/" in self.path) else "../explore" if "/explore/" in self.path else "./"
+            redirect = ("../?v=settings" if ("/jinka/" in self.path or "/notify/" in self.path)
+                        else "../explore" if "/explore/" in self.path else "./")
             # redirection relative : fonctionne derrière l'Ingress de Home Assistant
             self.send_response(303)
             self.send_header("Location", redirect)
