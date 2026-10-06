@@ -260,6 +260,7 @@ class App:
         dests = self.resolve_destinations(transit)
         crit = self.criteria_hash()
 
+        self.relocate_seloger_once()
         self.recheck_retained()
         done = {k for k, v in self.state["listings"].items()
                 if v["status"] in ("notified", "silent") or v.get("crit") == crit}
@@ -533,6 +534,16 @@ class App:
                 del lst[3:]
                 log.info("Email d'alerte %s reçu : %s", m["site"], m["subject"])
         return mails
+
+    def relocate_seloger_once(self):
+        """Les premières annonces SeLoger ont été placées au centre de Paris au lieu de leur arrondissement :
+        on les fait recalculer (sans renvoi si elles restent bonnes)."""
+        if self.state.get("seloger_relocated_v1"):
+            return
+        for v in self.state["listings"].values():
+            if v["listing"].get("alert_id") == "seloger" and v["status"] != "duplicate":
+                v["status"], v["crit"], v["reason"] = "pending", None, "position à recalculer"
+        self.state["seloger_relocated_v1"] = True
 
     def recheck_retained(self):
         """Annonces déjà retenues (même déjà envoyées) qui ne passent plus les critères simples — filtre

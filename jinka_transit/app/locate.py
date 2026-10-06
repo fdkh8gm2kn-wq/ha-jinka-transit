@@ -84,7 +84,7 @@ def distance_km(lat1, lon1, lat2, lon2):
 
 
 def commune_centre(postal_code, city, cache):
-    key = f"cp:{postal_code}|{city}"
+    key = f"cp2:{postal_code}|{city}"  # v2 : arrondissements de Paris (avant : centre de Paris)
     if key in cache:
         return cache[key]
     centre = None
