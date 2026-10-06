@@ -82,6 +82,9 @@ configuration:
     description: >-
       Ton adresse (plusieurs possibles, séparées par des virgules). L'email part de la boîte Gmail dédiée,
       avec la même clé d'application Google : rien d'autre à configurer.
+  email_sender_name:
+    name: Nom de l'expéditeur des emails
+    description: Nom affiché dans ta boîte de réception pour les annonces, rapports et alertes.
   error_email:
     name: Envoyer les erreurs par email à
     description: >-

@@ -5,6 +5,7 @@ import os
 import smtplib
 import time
 from email.message import EmailMessage
+from email.utils import formataddr
 
 from http_util import HttpError, request
 
@@ -18,7 +19,7 @@ SMTP_HOSTS = {"gmail.com": "smtp.gmail.com", "googlemail.com": "smtp.gmail.com",
 
 class Notifier:
     def __init__(self, whatsapp_phone="", callmebot_apikey="", ha_service="", email_to="", smtp_user="",
-                 smtp_password="", smtp_server="", free_sms_user="", free_sms_key=""):
+                 smtp_password="", smtp_server="", free_sms_user="", free_sms_key="", sender_name=""):
         self.phone = (whatsapp_phone or "").replace(" ", "")
         self.apikey = (callmebot_apikey or "").strip()
         self.ha_service = (ha_service or "").strip()
@@ -31,6 +32,7 @@ class Notifier:
             self.smtp_password = self.smtp_password.replace(" ", "")
         self.free_user = (free_sms_user or "").strip()
         self.free_key = (free_sms_key or "").strip()
+        self.sender_name = (sender_name or "").strip() or "Jinka Transit"
         self._last_whatsapp = 0.0
 
     @property
@@ -64,7 +66,7 @@ class Notifier:
     def _email(self, subject, text, html=None):
         msg = EmailMessage()
         msg["Subject"] = subject
-        msg["From"] = f"Jinka Transit <{self.smtp_user}>"
+        msg["From"] = formataddr((self.sender_name, self.smtp_user))
         msg["To"] = ", ".join(self.email_to)
         msg.set_content(text.replace("*", ""))
         if html:

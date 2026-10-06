@@ -711,3 +711,10 @@ app.state["listings"]["bi-x"] = {"status": "rejected", "crit": "x", "results": [
     "listing": {"id": "bienici:x", "alert_id": "bienici", "postal_code": "75018", "rent": 800, "area": 25.0}}
 assert app.find_twin(_se[1])["listing"]["id"] == "bienici:x"
 print("SeLoger (emails d'alerte) ✔")
+# Nom de l'expéditeur
+sent_mail.clear()
+_n = notify.Notifier(email_to="a@b.fr", smtp_user="dedie@gmail.com", smtp_password="x", sender_name="ALERTES IMMO Test")
+assert _n._email("t", "corps")
+assert "ALERTES IMMO" in str([m[1]["From"] for m in sent_mail if m[0] == "msg"][-1])
+assert notify.Notifier(email_to="a@b.fr", smtp_user="d@gmail.com", smtp_password="x").sender_name == "Jinka Transit"
+print("Nom de l'expéditeur ✔")

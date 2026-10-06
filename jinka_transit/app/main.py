@@ -440,7 +440,7 @@ class App:
         since = datetime.fromtimestamp(d["since"])
         o = self.opts
         n = Notifier(email_to=o.get("daily_report_email"), smtp_user=o.get("mail_user") or o.get("jinka_email"),
-                     smtp_password=o.get("mail_password"), smtp_server=o.get("smtp_server"))
+                     smtp_password=o.get("mail_password"), smtp_server=o.get("smtp_server"), sender_name=o.get("email_sender_name"))
         if not n.email_ok:
             return False
         sites = {k: d["sites"].get(k) or {"testées": 0, "retenues": 0, "doublons": 0, "liens": []}
@@ -476,7 +476,7 @@ class App:
         o = self.opts
         to = (o.get("error_email") or "").strip()
         n = Notifier(email_to=to, smtp_user=o.get("mail_user") or o.get("jinka_email"),
-                     smtp_password=o.get("mail_password"), smtp_server=o.get("smtp_server"))
+                     smtp_password=o.get("mail_password"), smtp_server=o.get("smtp_server"), sender_name=o.get("email_sender_name"))
         return n if n.email_ok else None
 
     def report_error(self, kind, message):
@@ -587,7 +587,8 @@ class App:
                         o.get("ha_notify_service"), email_to=o.get("email_to"),
                         smtp_user=o.get("mail_user") or o.get("jinka_email"),
                         smtp_password=o.get("mail_password"), smtp_server=o.get("smtp_server"),
-                        free_sms_user=o.get("free_sms_user"), free_sms_key=o.get("free_sms_key"))
+                        free_sms_user=o.get("free_sms_user"), free_sms_key=o.get("free_sms_key"),
+                        sender_name=o.get("email_sender_name"))
 
     def send_test(self):
         """Bouton « notification de test » : envoie un message sur chaque canal et dit lequel marche."""
@@ -683,7 +684,7 @@ class App:
         o = self.opts
         n = Notifier(email_to=o.get("daily_report_email") or o.get("error_email"),
                      smtp_user=o.get("mail_user") or o.get("jinka_email"),
-                     smtp_password=o.get("mail_password"), smtp_server=o.get("smtp_server"))
+                     smtp_password=o.get("mail_password"), smtp_server=o.get("smtp_server"), sender_name=o.get("email_sender_name"))
         if not n.email_ok:
             return
         bands = [("≤ 45 min", 0, 45), ("45 à 50 min", 46, 49), ("50 à 60 min", 50, 60), ("60 à 75 min", 61, 75)]
