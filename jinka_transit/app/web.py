@@ -67,7 +67,7 @@ button,.btn{font:inherit;padding:7px 14px;border-radius:9px;border:1px solid var
 .ad.t-fav{outline:2px solid #f5b546}.ad.t-visit{outline:2px solid var(--accent)}.ad.t-contact{outline:2px solid var(--ok)}
 .ad.t-drop{opacity:.55}
 .ph{display:block;height:170px;background:var(--chip);position:relative}
-.ph img{width:100%;height:100%;object-fit:cover;display:block}
+.ph img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
 .ph .none{display:flex;height:100%;align-items:center;justify-content:center;font-size:42px;color:var(--muted)}
 .ph .tag{position:absolute;top:8px;left:8px;background:rgba(0,0,0,.65);color:#fff;font-size:12px;padding:2px 8px;border-radius:999px}
 .ph .src{position:absolute;bottom:8px;left:8px;background:rgba(0,0,0,.55);color:#fff;font-size:11px;padding:2px 7px;border-radius:6px}
@@ -155,8 +155,9 @@ def link(view="list", **q):
 def card(v, tag, back, esc=html.escape):
     l = v["listing"]
     lid = l["id"]
-    img = (f"<img loading='lazy' referrerpolicy='no-referrer' src='{esc(l['image'])}' alt=''>"
-           if l.get("image") and str(l["image"]).startswith("http") else "<div class='none'>🏠</div>")
+    img = "<div class='none'>🏠</div>" + (
+        f"<img loading='lazy' referrerpolicy='no-referrer' src='{esc(l['image'])}' alt='' onerror='this.remove()'>"
+        if l.get("image") and str(l["image"]).startswith("http") else "")
     first = v.get("first_seen") or v.get("ts", 0)
     new = "<span class='tag'>nouveau</span>" if time.time() - first < 86400 and v["status"] != "rejected" else ""
     src = esc((l.get("source") or l.get("alert_name") or "").split(" · ")[0])
@@ -231,7 +232,7 @@ def render(app, flt=DEFAULT_FILTER, page=1, view="list", sort="recent"):
     except ValueError:
         last_ts = None
     quota = (st.get("idfm_quota") or {}).get("until", 0)
-    status = [f"<span>Dernier scan <b>{ago(last_ts)}</b></span>",
+    status = [f"<span>Dernier scan <b>{ago(last_ts) if last_ts else 'en cours…'}</b></span>",
               f"<span class='ok'><b>{len(ok_items)}</b> annonces OK</span>",
               f"<span><b>{new24}</b> nouvelle{'s' if new24 > 1 else ''} en 24 h</span>"]
     if last.get("error"):
