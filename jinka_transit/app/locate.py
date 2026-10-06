@@ -35,6 +35,12 @@ def fetch_ad_detail(uuid):
     m = re.search(r'"lat":([-0-9.]+|null),"lng":([-0-9.]+|null)', h)
     if m and m.group(1) != "null":
         out["lat"], out["lng"] = float(m.group(1)), float(m.group(2))
+    m = re.search(r'"lift":(true|false)', h)
+    if m:
+        out["lift"] = m.group(1) == "true"
+    m = re.search(r'"floor":(\d+)', h)
+    if m:
+        out["floor"] = int(m.group(1))
     m = re.search(r'"stops":(\[.*?\]),"', h)
     if m:
         try:

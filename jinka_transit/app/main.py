@@ -98,7 +98,7 @@ class App:
                           o.get("max_walk_minutes"), o.get("max_rent", 0), o.get("max_walk_home_minutes", 5),
                           "localisation-v2", "marche-destination-30", o.get("min_area", 0),
                           o.get("transfer_penalty_minutes", 3), o.get("max_transfers", 2),
-                          bool(o.get("furnished_only")), int(o.get("max_floor") or 0), "ascenseur-v1"],
+                          bool(o.get("furnished_only")), int(o.get("max_floor") or 0), "ascenseur-v2"],
                          sort_keys=True)
         return hashlib.sha1(key.encode()).hexdigest()[:12]
 
@@ -195,7 +195,27 @@ class App:
             return f"surface {listing['area']:g} m² < {min_area} m²"
         return None
 
+    def complete_building(self, listing):
+        """Étage élevé sans info d'ascenseur : on lit la fiche complète jinka.fr (champ ascenseur, texte entier)."""
+        max_floor = int(self.opts.get("max_floor") or 0)
+        floor = listing.get("floor")
+        if floor is None:
+            floor = floor_from_text(listing.get("description"))
+        if not (max_floor and listing.get("uuid") and floor is not None and floor > max_floor
+                and has_elevator(listing) is None and not listing.get("detail_checked")):
+            return
+        import locate
+        d = locate.fetch_ad_detail(listing["uuid"])
+        listing["detail_checked"] = True
+        if d.get("lift") is not None:
+            listing["elevator"] = d["lift"]
+        if d.get("floor") is not None and listing.get("floor") is None:
+            listing["floor"] = d["floor"]
+        if len(d.get("description") or "") > len(listing.get("description") or ""):
+            listing["description"] = d["description"][:2000]
+
     def evaluate(self, listing, dests, transit):
+        self.complete_building(listing)
         reason = self.basic_reject(listing)
         if reason:
             return "rejected", [], reason
@@ -489,7 +509,8 @@ class App:
                 reason = self.basic_reject(v["listing"])
                 if reason:
                     v["status"], v["reason"], v["results"] = "rejected", f"{reason} (revérifiée)", []
-                    v["crit"] = self.criteria_hash()
+                    # ascenseur inconnu : recalculée si elle réapparaît (la fiche complète peut le préciser)
+                    v["crit"] = None if "non précisé" in reason else self.criteria_hash()
                     n += 1
                     continue
                 reason = self.transfer_reject(v.get("results"))

@@ -664,3 +664,17 @@ import jinka as _jk2
 assert _jk2.normalize({"id": 1, "floor": -1, "lift": None}, "a", "n")["floor"] is None
 assert fmt.building_info({"floor": 6, "elevator": True}) == "6e étage · ascenseur"
 print("Étage maximum (5e et + seulement avec ascenseur) ✔")
+# Étage élevé sans info : lecture de la fiche Jinka (champ ascenseur)
+import locate as _loc
+_fad = _loc.fetch_ad_detail
+_loc.fetch_ad_detail = lambda uuid: {"lift": True, "floor": 6, "description": "Studio lumineux"}
+app.opts["max_floor"] = 4
+_l = {"uuid": "u1", "floor": 6, "description": "", "furnished": True}
+app.complete_building(_l)
+assert _l["elevator"] is True and _l["detail_checked"] and app.basic_reject(_l) is None
+_loc.fetch_ad_detail = lambda uuid: {"lift": None}
+_l2 = {"uuid": "u2", "floor": 6, "description": ""}
+app.complete_building(_l2)
+assert app.basic_reject(_l2).startswith("6e étage ascenseur non précisé")
+_loc.fetch_ad_detail = _fad
+print("Ascenseur lu sur la fiche Jinka ✔")
