@@ -193,9 +193,8 @@ def card(v, tag, back, esc=html.escape):
         if r.get("info_only"):
             infos.append(line)
             continue
-        extra = f" <small>(compté {r['counted']})</small>" if r.get("counted") and r["counted"] != r["minutes"] else ""
         trips.append(f"<span class='trip{'' if r.get('ok') else ' ko'}' title='{esc(r.get('summary') or '')}'>"
-                     f"{esc(short_dest(r['name']))} {r['minutes']}'{extra}</span>")
+                     f"{esc(short_dest(r['name']))} {r['minutes']}'</span>")
         infos.insert(0, line)
     why = (f"<div class='why'>{esc(v.get('reason') or '')}</div>"
            if v["status"] in ("rejected", "duplicate", "pending") and v.get("reason") else "")
