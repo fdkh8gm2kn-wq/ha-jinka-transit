@@ -6,6 +6,7 @@ import hmac
 import html
 import ipaddress
 import json
+import logging
 import os
 import re
 import threading
@@ -16,6 +17,8 @@ from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from fmt import steps_of, title_of
+
+log = logging.getLogger("web")
 
 STATUS_LABEL = {"duplicate": "↔️ doublon", "notified": "✅ envoyée", "match": "⏳ OK, envoi en attente",
                 "silent": "✅ OK (1er scan, non envoyée)", "rejected": "❌ refusée",
@@ -422,9 +425,11 @@ def start(app, port=8099):
                         given = base64.b64decode(auth[6:]).decode("utf-8", "replace").partition(":")[2]
                     except ValueError:
                         given = ""
+                given = given.strip()
                 if given and hmac.compare_digest(given.encode(), pwd.encode()):
                     return True
                 if given:
+                    log.warning("Accès direct refusé depuis %s : mot de passe incorrect.", ip)
                     time.sleep(1)  # ralentit les essais de mot de passe
                 body = "Mot de passe requis.".encode()
                 self.send_response(401)
@@ -434,6 +439,8 @@ def start(app, port=8099):
                 self.end_headers()
                 self.wfile.write(body)
                 return False
+            log.warning("Accès direct refusé depuis %s (%s).", ip,
+                        "réseau non local" if pwd else "pas de mot de passe configuré")
             self._send(403, "Accès réservé à Home Assistant, ou au réseau local avec le mot de passe "
                             "(option « Mot de passe de la page en accès direct »).", "text/plain; charset=utf-8")
             return False
