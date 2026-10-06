@@ -82,8 +82,8 @@ button,.btn{font:inherit;padding:7px 14px;border-radius:9px;border:1px solid var
 .where{font-weight:600}.where .q{font-weight:400;color:var(--muted)}
 .badges{display:flex;gap:5px;flex-wrap:wrap}.b{font-size:12px;padding:2px 7px;border-radius:6px;background:var(--chip)}
 .b.warn{background:var(--warnbg);color:var(--warn)}.b.nm{background:var(--accentbg);color:var(--accent);font-weight:600}
-.dpe{font-weight:700;color:#111}.dpe.A{background:#009c6d;color:#fff}.dpe.B{background:#52b153;color:#fff}.dpe.C{background:#a3cf5e}
-.dpe.D{background:#f6e04b}.dpe.E{background:#f0b40f}.dpe.F{background:#eb8235;color:#fff}.dpe.G{background:#d7221f;color:#fff}
+.dpe{font-weight:800;color:#111;border-radius:4px 10px 10px 4px;padding-right:10px}.dpe.A{background:#009c6d;color:#fff}.dpe.B{background:#52b153;color:#fff}.dpe.C{background:#a5cc74}
+.dpe.D{background:#f4e70f}.dpe.E{background:#f0b40f}.dpe.F{background:#eb8235;color:#fff}.dpe.G{background:#d7221f;color:#fff}
 .trips{display:flex;gap:6px;flex-wrap:wrap}.trip{font-size:15px;font-weight:600;padding:4px 10px 4px 6px;border-radius:10px;background:var(--okbg);color:var(--ok);display:inline-flex;align-items:center;gap:5px}
 .trip .ic{font-size:22px;line-height:1}
 .trip.ko{background:var(--kobg);color:var(--ko)}.trip.info{background:var(--chip);color:var(--muted)}.trip small{opacity:.8}

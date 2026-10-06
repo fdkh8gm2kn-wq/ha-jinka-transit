@@ -117,7 +117,8 @@ def dest_icon(name, short=True):
     return m.group(1) if (m and short) else (name or "")
 
 
-DPE_COLORS = {"A": ("#009c6d", "#fff"), "B": ("#52b153", "#fff"), "C": ("#a3cf5e", "#111"), "D": ("#f6e04b", "#111"),
+# Couleurs officielles de l'étiquette énergie (DPE 2021)
+DPE_COLORS = {"A": ("#009c6d", "#fff"), "B": ("#52b153", "#fff"), "C": ("#a5cc74", "#111"), "D": ("#f4e70f", "#111"),
               "E": ("#f0b40f", "#111"), "F": ("#eb8235", "#fff"), "G": ("#d7221f", "#fff")}
 
 

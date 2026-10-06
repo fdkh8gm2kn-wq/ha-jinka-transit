@@ -98,7 +98,8 @@ class App:
                           o.get("max_walk_minutes"), o.get("max_rent", 0), o.get("max_walk_home_minutes", 5),
                           "localisation-v2", "marche-destination-30", o.get("min_area", 0),
                           o.get("transfer_penalty_minutes", 3), o.get("max_transfers", 2),
-                          bool(o.get("furnished_only")), int(o.get("max_floor") or 0), "ascenseur-v2"],
+                          bool(o.get("furnished_only")), int(o.get("max_floor") or 0), "ascenseur-v2",
+                          (o.get("max_dpe") or "").upper()],
                          sort_keys=True)
         return hashlib.sha1(key.encode()).hexdigest()[:12]
 
@@ -180,6 +181,9 @@ class App:
             return "chambre en colocation"
         if self.opts.get("furnished_only") and listing.get("furnished") is False:
             return "non meublé"
+        max_dpe = (self.opts.get("max_dpe") or "").strip().upper()[:1]
+        if max_dpe in "ABCDEFG" and max_dpe and listing.get("dpe") and listing["dpe"] > max_dpe:
+            return f"DPE {listing['dpe']} (max {max_dpe})"
         max_floor = int(self.opts.get("max_floor") or 0)
         if max_floor:
             floor = listing.get("floor")

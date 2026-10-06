@@ -747,3 +747,12 @@ _m = [x[1] for x in sent_mail if x[0] == "msg"][-1]
 assert _ok and _to == "rapport@example.org" and _m["Subject"].startswith("[Exemple]")
 assert "Voir l'annonce" in _m.get_body(("html",)).get_content()
 print("Exemple d'email d'annonce ✔")
+# DPE maximum
+app.opts.update({"max_dpe": "E", "max_floor": 0, "max_rent": 0, "min_area": 0, "furnished_only": False})
+assert app.basic_reject({"dpe": "F", "description": ""}) == "DPE F (max E)"
+assert app.basic_reject({"dpe": "G", "description": ""}) == "DPE G (max E)"
+assert app.basic_reject({"dpe": "E", "description": ""}) is None and app.basic_reject({"dpe": None, "description": ""}) is None
+app.opts["max_dpe"] = ""
+assert app.basic_reject({"dpe": "G", "description": ""}) is None
+assert fmt.DPE_COLORS["D"][0] == "#f4e70f"
+print("DPE maximum ✔")
