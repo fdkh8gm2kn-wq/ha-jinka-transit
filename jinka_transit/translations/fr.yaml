@@ -37,7 +37,10 @@ configuration:
     name: Surface minimum (m²)
     description: 0 = pas de minimum. Les annonces sans surface indiquée sont gardées.
   furnished_only:
-    name: Meublé uniquement (Bien'ici)
+    name: Meublé uniquement
+    description: >-
+      Décoché : les logements non meublés sont aussi retenus, avec « 📦 NON MEUBLÉ » dans le titre (email, SMS, page).
+      Pour Jinka, c'est aussi le critère « meublé » de tes alertes sur jinka.fr qui compte.
   bienici:
     name: Chercher aussi sur Bien'ici
     description: Mêmes critères que les alertes Jinka ; les doublons Jinka/Bien'ici sont écartés.

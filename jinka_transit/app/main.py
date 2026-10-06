@@ -68,7 +68,8 @@ class App:
         key = json.dumps([o["destinations"], sorted(o.get("allowed_modes") or []),
                           o.get("max_walk_minutes"), o.get("max_rent", 0), o.get("max_walk_home_minutes", 5),
                           "localisation-v2", "marche-destination-30", o.get("min_area", 0),
-                          o.get("transfer_penalty_minutes", 3), o.get("max_transfers", 2)],
+                          o.get("transfer_penalty_minutes", 3), o.get("max_transfers", 2),
+                          bool(o.get("furnished_only"))],
                          sort_keys=True)
         return hashlib.sha1(key.encode()).hexdigest()[:12]
 
@@ -145,6 +146,8 @@ class App:
         import bienici
         if listing.get("coliving") or bienici.is_coliving({"description": listing.get("description")}):
             return "chambre en colocation"
+        if self.opts.get("furnished_only") and listing.get("furnished") is False:
+            return "non meublé"
         max_rent = int(self.opts.get("max_rent") or 0)
         if max_rent and listing.get("rent") and listing["rent"] > max_rent:
             return f"loyer {int(listing['rent'])} € > {max_rent} €"
@@ -226,7 +229,7 @@ class App:
                 zones = bienici.zones_for(o["bienici_communes"], self.state.setdefault("geocode", {})) \
                     if o.get("bienici_communes") else [z for v in bienici.default_zones().values() for z in v]
                 bi = bienici.listings(zones, int(o.get("max_rent") or 0), int(o.get("min_area") or 0),
-                                      furnished=o.get("furnished_only", True))
+                                      furnished=bool(o.get("furnished_only")))
                 log.info("Bien'ici : %d annonces.", len(bi))
                 listings += bi
             except (HttpError, OSError, ValueError) as e:

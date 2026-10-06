@@ -9,6 +9,10 @@ def title_of(l):
         parts.append(f"{int(l['area'])} m²")
     if l.get("rent"):
         parts.append(f"{int(l['rent']):,} €".replace(",", " "))
+    if l.get("furnished") is False:
+        parts.append("📦 NON MEUBLÉ")
+    elif l.get("furnished"):
+        parts.append("meublé")
     where = " ".join(x for x in (l.get("city"), f"({l['postal_code']})" if l.get("postal_code") else "") if x)
     return f"🏠 {' · '.join(parts) or 'Annonce'} — {where}".strip(" —")
 

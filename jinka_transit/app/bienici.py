@@ -101,6 +101,7 @@ def normalize(ad):
         "floor": ad.get("floor"),
         "safety": safety,
         "coliving": is_coliving(ad),
+        "furnished": ad.get("isFurnished"),
     }
 
 

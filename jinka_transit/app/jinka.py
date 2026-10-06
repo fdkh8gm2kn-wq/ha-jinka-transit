@@ -132,6 +132,7 @@ def normalize(ad, alert_id, alert_name):
         "stops": ad.get("stops") or [],
         "description": (ad.get("description") or "")[:2000],
         "quartier": ad.get("quartier_name"),
+        "furnished": ad.get("furnished"),
     }
 
 

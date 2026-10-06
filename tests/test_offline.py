@@ -627,3 +627,13 @@ assert "calcul en attente" in _w, _re.findall(r"Afficher :.*?</div>", _w)
 _n = sum(1 for v in app.state["listings"].values() if v["status"] in ("match", "pending"))
 assert f"en attente ({_n})" in _w and f"({_n} annonces)" in _w, (_n, _re.findall(r"page \d+ / \d+ \(\d+ annonces\)", _w))
 print("Filtre en attente ✔")
+# Non meublés : acceptés et signalés, sauf si « meublé uniquement »
+assert "📦 NON MEUBLÉ" in fmt.title_of({"rooms": 1, "area": 22, "rent": 800, "city": "Vanves", "furnished": False})
+assert "meublé" in fmt.title_of({"rooms": 1, "area": 22, "rent": 800, "city": "Vanves", "furnished": True})
+assert "MEUBL" not in fmt.title_of({"rooms": 1, "area": 22, "rent": 800, "city": "Vanves"})
+assert bienici.normalize({**bi_ads[0], "isFurnished": False})["furnished"] is False
+app.opts.update({"furnished_only": True, "max_rent": 0, "min_area": 0})
+assert app.basic_reject({"furnished": False, "description": ""}) == "non meublé"
+app.opts["furnished_only"] = False
+assert app.basic_reject({"furnished": False, "description": ""}) is None
+print("Non meublés signalés ✔")
