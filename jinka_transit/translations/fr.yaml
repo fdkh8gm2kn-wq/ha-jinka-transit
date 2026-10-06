@@ -85,6 +85,11 @@ configuration:
   email_sender_name:
     name: Nom de l'expéditeur des emails
     description: Nom affiché dans ta boîte de réception pour les annonces, rapports et alertes.
+  local_password:
+    name: Mot de passe de la page en accès direct
+    description: >-
+      Pour ouvrir la page sans Home Assistant, sur le réseau de la maison : http://homeassistant.local:8099
+      (identifiant : n'importe lequel). Vide = accès direct désactivé.
   error_email:
     name: Envoyer les erreurs par email à
     description: >-
@@ -131,3 +136,5 @@ configuration:
     name: Notifications max par scan
   notify_existing_on_first_run:
     name: Envoyer les annonces déjà présentes au 1er scan
+network:
+  8099/tcp: Page en accès direct (réseau local, mot de passe requis)

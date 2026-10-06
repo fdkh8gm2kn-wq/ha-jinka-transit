@@ -1,7 +1,10 @@
 """Mini interface web (onglet dans Home Assistant via Ingress, ou http://localhost:8099 en local)."""
 
+import base64
 import hashlib
+import hmac
 import html
+import ipaddress
 import json
 import os
 import re
@@ -386,6 +389,16 @@ def render_settings(app):
  placeholder="ton email Jinka" required><button>Recevoir un code</button></form>{code_form}{auto_form}</div>"""
 
 
+def is_private(ip):
+    """Adresse du réseau local (box, Wi-Fi), jamais une adresse Internet."""
+    try:
+        a = ipaddress.ip_address(ip)
+        a = getattr(a, "ipv4_mapped", None) or a
+        return a.is_private and not a.is_loopback
+    except ValueError:
+        return False
+
+
 INGRESS_IP = "172.30.32.2"  # seul client autorisé dans HA : le proxy Ingress (déjà authentifié par HA)
 ALLOW_ALL = os.environ.get("WEB_ALLOW_ALL") == "1"  # test local (docker-compose)
 
@@ -396,9 +409,33 @@ def start(app, port=8099):
             pass
 
         def _allowed(self):
-            if ALLOW_ALL or self.client_address[0] in (INGRESS_IP, "127.0.0.1", "::1"):
+            ip = self.client_address[0]
+            if ALLOW_ALL or ip in (INGRESS_IP, "127.0.0.1", "::1"):
                 return True
-            self._send(403, "Accès réservé à l'interface Home Assistant (Ingress).", "text/plain; charset=utf-8")
+            # accès direct (http://homeassistant.local:8099) : réseau local uniquement, avec mot de passe
+            pwd = (app.opts.get("local_password") or "").strip()
+            if pwd and is_private(ip):
+                auth = self.headers.get("Authorization", "")
+                given = ""
+                if auth.startswith("Basic "):
+                    try:
+                        given = base64.b64decode(auth[6:]).decode("utf-8", "replace").partition(":")[2]
+                    except ValueError:
+                        given = ""
+                if given and hmac.compare_digest(given.encode(), pwd.encode()):
+                    return True
+                if given:
+                    time.sleep(1)  # ralentit les essais de mot de passe
+                body = "Mot de passe requis.".encode()
+                self.send_response(401)
+                self.send_header("WWW-Authenticate", 'Basic realm="ALERTE IMMO", charset="UTF-8"')
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return False
+            self._send(403, "Accès réservé à Home Assistant, ou au réseau local avec le mot de passe "
+                            "(option « Mot de passe de la page en accès direct »).", "text/plain; charset=utf-8")
             return False
 
         def _send(self, code, body, ctype="text/html; charset=utf-8"):
