@@ -282,6 +282,8 @@ class App:
                 self.save_state()
             raise
 
+        self.capture_alert_emails()
+
         if o.get("bienici", True):
             import bienici
             try:
@@ -499,6 +501,29 @@ class App:
                 self.save_state()
         except Exception:  # noqa: BLE001
             log.exception("Impossible d'envoyer l'email de rétablissement")
+
+    def capture_alert_emails(self):
+        """Emails d'alerte SeLoger / Leboncoin de la boîte dédiée : on garde les derniers (pour la lecture
+        des annonces). Ne bloque jamais le scan."""
+        o = self.opts
+        if not (o.get("jinka_email") and o.get("mail_password")):
+            return []
+        import mailbox
+        try:
+            mails = mailbox.alert_emails(mailbox.imap_host(o.get("mail_user") or o["jinka_email"],
+                                                           o.get("mail_imap_server")),
+                                         o.get("mail_user") or o["jinka_email"], o["mail_password"])
+        except Exception as e:  # noqa: BLE001
+            log.warning("Lecture des alertes SeLoger/Leboncoin impossible : %s", e)
+            return []
+        samples = self.state.setdefault("mail_samples", {})
+        for m in mails:
+            lst = samples.setdefault(m["site"], [])
+            if m["id"] not in [x["id"] for x in lst]:
+                lst.insert(0, {**m, "html": m["html"][:300000]})
+                del lst[3:]
+                log.info("Email d'alerte %s reçu : %s", m["site"], m["subject"])
+        return mails
 
     def recheck_retained(self):
         """Annonces déjà retenues (même déjà envoyées) qui ne passent plus les critères simples — filtre

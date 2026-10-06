@@ -146,3 +146,52 @@ def extract_code(text):
         return m.group(1)
     candidates = [c for c in re.findall(r"(?<![\d.,/:])\b(\d{4})\b(?![\d.,/:])", text) if c not in years]
     return candidates[0] if len(set(candidates)) == 1 else None
+
+
+ALERT_SENDERS = ("seloger", "leboncoin")
+
+
+def alert_emails(host, user, password, since_days=3, max_per_folder=60):
+    """Emails d'alerte SeLoger / Leboncoin reçus dans la boîte dédiée (les plus récents d'abord)."""
+    password = clean_password(host, password)
+    imap = imaplib.IMAP4_SSL(host, 993, timeout=30)
+    out = []
+    try:
+        imap.login(user, password)
+        day = (datetime.now() - timedelta(days=since_days)).strftime("%d-%b-%Y")
+        for folder in folders(imap):
+            if imap.select(folder, readonly=True)[0] != "OK":
+                continue
+            typ, data = imap.search(None, "SINCE", day)
+            if typ != "OK":
+                continue
+            for num in reversed(data[0].split()[-max_per_folder:]):
+                typ, head = imap.fetch(num, "(BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE MESSAGE-ID)])")
+                if typ != "OK" or not head or not isinstance(head[0], tuple):
+                    continue
+                h = email.message_from_bytes(head[0][1])
+                sender = str(make_header(decode_header(h.get("From", ""))))
+                site = next((s for s in ALERT_SENDERS if s in sender.lower()), None)
+                if not site:
+                    continue
+                typ, msg_data = imap.fetch(num, "(BODY.PEEK[])")
+                if typ != "OK" or not msg_data or not isinstance(msg_data[0], tuple):
+                    continue
+                msg = email.message_from_bytes(msg_data[0][1])
+                out.append({"site": site, "id": h.get("Message-ID") or f"{folder}:{num.decode()}",
+                            "from": sender, "subject": str(make_header(decode_header(h.get("Subject", "")))),
+                            "date": h.get("Date"), "html": html_part(msg)})
+    finally:
+        try:
+            imap.logout()
+        except Exception:  # noqa: BLE001
+            pass
+    return out
+
+
+def html_part(msg):
+    for part in msg.walk() if msg.is_multipart() else [msg]:
+        if part.get_content_type() == "text/html":
+            payload = part.get_payload(decode=True) or b""
+            return payload.decode(part.get_content_charset() or "utf-8", "replace")
+    return body_text(msg)

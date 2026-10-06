@@ -178,9 +178,12 @@ def start(app, port=8099):
             if not self._allowed():
                 return
             path, _, query = self.path.partition("?")
+            if path.endswith("/api/mail_samples"):
+                return self._send(200, json.dumps(app.state.get("mail_samples", {}), ensure_ascii=False),
+                                  "application/json")
             if path.endswith("/api/state"):
                 return self._send(200, json.dumps({"last_scan": app.last_scan,
-                                                  **{k: v for k, v in app.state.items() if k != "jinka_auth"}},
+                                                  **{k: v for k, v in app.state.items() if k not in ("jinka_auth", "mail_samples")}},
                                                   ensure_ascii=False), "application/json")
             if path.rstrip("/").endswith("explore"):
                 return self._send(200, render_explore(app))
