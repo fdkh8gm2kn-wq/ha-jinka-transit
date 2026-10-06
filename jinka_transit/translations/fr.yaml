@@ -36,6 +36,11 @@ configuration:
   min_area:
     name: Surface minimum (m²)
     description: 0 = pas de minimum. Les annonces sans surface indiquée sont gardées.
+  max_floor:
+    name: Étage maximum
+    description: >-
+      0 = pas de limite. Étage lu dans l'annonce (champ du site ou texte « au 5e étage ») ; si l'étage
+      n'est pas indiqué, l'annonce est gardée.
   furnished_only:
     name: Meublé uniquement
     description: >-

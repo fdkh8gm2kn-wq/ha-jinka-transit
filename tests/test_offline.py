@@ -644,3 +644,16 @@ assert _jk.normalize({"id": 1, "energy_dpe": "NC"}, "a", "n")["dpe"] is None
 assert bienici.normalize({**bi_ads[0], "energyClassification": "C"})["dpe"] == "C"
 assert "DPE C" in fmt.title_of({"rooms": 1, "area": 22, "rent": 800, "city": "Vanves", "dpe": "C", "furnished": False})
 print("DPE dans le titre ✔", fmt.title_of({"rooms": 1, "area": 22, "rent": 800, "city": "Vanves", "postal_code": "92170", "dpe": "C", "furnished": False}))
+# Étage maximum
+assert main.floor_from_text("Studio au 5ème étage sans ascenseur") == 5
+assert main.floor_from_text("situé au 2e et dernier étage") == 2
+assert main.floor_from_text("Immeuble de 6 étages, appartement en rez-de-chaussée") == 0
+assert main.floor_from_text("Bel appartement lumineux") is None
+app.opts.update({"max_floor": 4, "furnished_only": False, "max_rent": 0, "min_area": 0})
+assert app.basic_reject({"floor": 6, "description": ""}) == "6e étage (max 4e)"
+assert app.basic_reject({"floor": 4, "description": ""}) is None
+assert app.basic_reject({"floor": None, "description": "au 7ème étage avec ascenseur"}) == "7e étage (max 4e)"
+assert app.basic_reject({"floor": None, "description": "proche métro"}) is None  # étage inconnu : gardée
+app.opts["max_floor"] = 0
+assert app.basic_reject({"floor": 9, "description": ""}) is None
+print("Étage maximum ✔")

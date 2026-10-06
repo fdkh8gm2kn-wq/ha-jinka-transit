@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import random
+import re
 import threading
 import time
 from datetime import datetime, timedelta
@@ -28,6 +29,20 @@ ERROR_EMAIL_EVERY = 6 * 3600  # même type d'erreur : au plus un email toutes le
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
                     datefmt="%Y-%m-%d %H:%M:%S")
 log = logging.getLogger("main")
+
+
+FLOOR_RE = re.compile(r"\b(\d{1,2})\s*(?:e|è|ème|eme|ieme|ième|er|ere|ère)\s+(?:et\s+dernier\s+)?étage", re.I)
+
+
+def floor_from_text(text):
+    """Étage cité dans l'annonce (« au 5e étage », « 3ème étage »), 0 pour le rez-de-chaussée, sinon None."""
+    text = text or ""
+    m = FLOOR_RE.search(text)
+    if m:
+        return int(m.group(1))
+    if re.search(r"\brez[- ]de[- ]chauss[ée]e\b|\bRDC\b", text, re.I):
+        return 0
+    return None
 
 
 class App:
@@ -69,7 +84,7 @@ class App:
                           o.get("max_walk_minutes"), o.get("max_rent", 0), o.get("max_walk_home_minutes", 5),
                           "localisation-v2", "marche-destination-30", o.get("min_area", 0),
                           o.get("transfer_penalty_minutes", 3), o.get("max_transfers", 2),
-                          bool(o.get("furnished_only"))],
+                          bool(o.get("furnished_only")), int(o.get("max_floor") or 0)],
                          sort_keys=True)
         return hashlib.sha1(key.encode()).hexdigest()[:12]
 
@@ -148,6 +163,13 @@ class App:
             return "chambre en colocation"
         if self.opts.get("furnished_only") and listing.get("furnished") is False:
             return "non meublé"
+        max_floor = int(self.opts.get("max_floor") or 0)
+        if max_floor:
+            floor = listing.get("floor")
+            if floor is None:
+                floor = floor_from_text(listing.get("description"))
+            if floor is not None and floor > max_floor:
+                return f"{int(floor)}e étage (max {max_floor}e)"
         max_rent = int(self.opts.get("max_rent") or 0)
         if max_rent and listing.get("rent") and listing["rent"] > max_rent:
             return f"loyer {int(listing['rent'])} € > {max_rent} €"

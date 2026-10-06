@@ -134,6 +134,7 @@ def normalize(ad, alert_id, alert_name):
         "quartier": ad.get("quartier_name"),
         "furnished": ad.get("furnished"),
         "dpe": dpe_letter(ad.get("energy_dpe") or ad.get("dpe")),
+        "floor": _num(ad.get("floor")),
     }
 
 
