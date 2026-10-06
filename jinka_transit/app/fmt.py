@@ -127,7 +127,7 @@ def html_of(v):
 <p style="margin:18px 0"><a href="{e(l['link'])}" style="background:#0b63ce;color:#fff;padding:10px 16px;
 border-radius:8px;text-decoration:none">Voir l'annonce</a>{maps}</p>
 {f"<p>🏢 {e(building_info(l))}</p>" if building_info(l) else ""}
-<p style="color:#888;font-size:12px">{e(l.get('source') or '')} · alerte « {e(l.get('alert_name') or '')} » · Jinka Transit</p></div>"""
+<p style="color:#888;font-size:12px">{e(l.get('source') or '')} · alerte « {e(l.get('alert_name') or '')} » · {e(v.get('brand') or 'Jinka Transit')}</p></div>"""
 
 
 def building_info(l):

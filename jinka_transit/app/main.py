@@ -276,7 +276,7 @@ class App:
             self.state["auth_alert_sent"] = False
         except JinkaAuthError as e:
             if not self.state.get("auth_alert_sent"):
-                notifier.send("Jinka Transit : connexion Jinka impossible",
+                notifier.send(f"{self.brand()} : connexion Jinka impossible",
                               f"{e}\nVérifie la boîte mail dédiée dans la configuration, ou reconnecte-toi "
                               "depuis la page de l'add-on (code par email).")
                 self.state["auth_alert_sent"] = True
@@ -373,7 +373,7 @@ class App:
         sent = 0
         for v in pending[:limit]:
             if notifier.send(title_of(v["listing"]), body_of(v), v["listing"]["link"], v["listing"]["image"],
-                             short=short_of(v), html=html_of(v)):
+                             short=short_of(v), html=html_of({**v, "brand": self.brand()})):
                 v["status"] = "notified"
                 v["notified_at"] = time.time()
                 sent += 1
@@ -465,7 +465,7 @@ class App:
                 f"{rows}<tr><td><b>Total</b></td><td align=right>{tot_t}</td><td align=right><b>{tot_r}</b></td><td></td></tr></table>"
                 + (f"<p>Annonces retenues :</p><ul>{links}</ul>" if links else "")
                 + f"<p style='color:#888'>Dernier scan : {self.last_scan.get('at') or '—'} ({self.last_scan.get('error') or 'ok'})</p>")
-        if n._email(f"📊 Jinka Transit : {tot_t} annonces testées, {tot_r} retenues", "\n".join(lines), html):
+        if n._email(f"📊 {self.brand()} : {tot_t} annonces testées, {tot_r} retenues", "\n".join(lines), html):
             self.state["daily"] = {"since": time.time(), "sites": {}}
             self.state["daily_sent"] = now.strftime("%Y-%m-%d")
             self.save_state()
@@ -491,7 +491,7 @@ class App:
                 return
             text = (f"{message}\n\nType : {kind}\nDate : {datetime.now():%d/%m/%Y %H:%M}\n"
                     "Un email de rétablissement sera envoyé quand tout refonctionnera.")
-            if n._email(f"⚠️ Jinka Transit : erreur ({kind})", text):
+            if n._email(f"⚠️ {self.brand()} : erreur ({kind})", text):
                 errors[kind] = {"message": message, "ts": time.time()}
                 self.save_state()
         except Exception:  # noqa: BLE001 - l'alerte ne doit jamais casser le scan
@@ -504,7 +504,7 @@ class App:
             return
         try:
             n = self.error_notifier()
-            if n and n._email("✅ Jinka Transit : rétabli",
+            if n and n._email(f"✅ {self.brand()} : rétabli",
                               f"Le scan refonctionne ({self.last_scan['status']}).\n"
                               f"Dernière erreur : {errors['scan']['message']}"):
                 errors.pop("scan")
@@ -581,6 +581,10 @@ class App:
                 return v
         return None
 
+    def brand(self):
+        """Nom affiché dans les emails (expéditeur et objets)."""
+        return (self.opts.get("email_sender_name") or "").strip() or "Jinka Transit"
+
     def make_notifier(self):
         o = self.opts
         return Notifier(o.get("whatsapp_phone"), o.get("whatsapp_callmebot_apikey"),
@@ -594,7 +598,7 @@ class App:
         """Bouton « notification de test » : envoie un message sur chaque canal et dit lequel marche."""
         self.opts = self.load_options()
         n = self.make_notifier()
-        title = "🧪 Jinka Transit : test de notification"
+        title = f"🧪 {self.brand()} : test de notification"
         text = "Si tu lis ce message, ce canal fonctionne."
         results = []
         if n.email_ok:
@@ -694,7 +698,7 @@ class App:
             names = [f"{r['nom']} ({r['worst']})" for r in result["results"]
                      if r["ok"] and r["worst"] is not None and lo <= r["worst"] <= hi]
             lines += [f"{label} — {len(names)} communes :", ", ".join(names) or "—", ""]
-        n._email("🗺️ Jinka Transit : recherche élargie terminée", "\n".join(lines))
+        n._email(f"🗺️ {self.brand()} : recherche élargie terminée", "\n".join(lines))
 
     # ---------- reconnexion automatique (code lu dans la boîte mail dédiée) ----------
 
