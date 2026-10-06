@@ -678,3 +678,6 @@ app.complete_building(_l2)
 assert app.basic_reject(_l2).startswith("6e étage ascenseur non précisé")
 _loc.fetch_ad_detail = _fad
 print("Ascenseur lu sur la fiche Jinka ✔")
+assert main.has_elevator({"description": "W.C. Gd placard.7ème étage sans asc. Bon état."}) is False
+assert main.has_elevator({"description": "5e étage avec asc. refait"}) is True
+print("Abréviation « asc. » ✔")

@@ -45,8 +45,8 @@ def floor_from_text(text):
     return None
 
 
-NO_ELEVATOR_RE = re.compile(r"\b(sans|pas d['’]|pas de|aucun)\s*ascenseur", re.I)
-ELEVATOR_RE = re.compile(r"\bascenseur\b", re.I)
+NO_ELEVATOR_RE = re.compile(r"\b(sans|pas d['’]|pas de|aucun)\s*(ascenseur|asc\b\.?)", re.I)
+ELEVATOR_RE = re.compile(r"\bascenseur\b|\bavec asc\b\.?", re.I)
 
 
 def has_elevator(listing):
