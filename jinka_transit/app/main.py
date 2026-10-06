@@ -224,7 +224,7 @@ class App:
             import locate
             found = locate.locate(listing, transit, self.state.setdefault("geocode", {}))
             if not found:
-                return "rejected", [], "pas de position (ni GPS, ni station dans l'annonce)"
+                return "rejected", [], "pas de position (ni GPS, ni station ou quartier localisable)"
             listing["lat"], listing["lng"], listing["approx"] = found
             if listing["approx"]:
                 home_walk_max = None  # on part de la station elle-même
@@ -282,7 +282,7 @@ class App:
                 self.save_state()
             raise
 
-        self.capture_alert_emails()
+        mails = self.capture_alert_emails()
 
         if o.get("bienici", True):
             import bienici
@@ -296,6 +296,15 @@ class App:
             except (HttpError, OSError, ValueError) as e:
                 log.warning("Bien'ici indisponible (%s) : on continue avec Jinka seul.", e)
                 self.report_error("bienici", f"Bien'ici indisponible : {e}")
+
+        if o.get("seloger", True) and mails:
+            import seloger
+            se = [x for m in mails if m["site"] == "seloger" for x in seloger.parse_email(m["html"])]
+            seen = set()
+            se = [x for x in se if not (x["id"] in seen or seen.add(x["id"]))]
+            if se:
+                log.info("SeLoger (emails d'alerte) : %d annonces.", len(se))
+            listings += se
 
         stats = {"annonces": len(listings), "évaluées": 0, "ok": 0, "refusées": 0, "doublons": 0}
         known = self.state["listings"]
@@ -549,12 +558,13 @@ class App:
             self.save_state()
 
     def find_twin(self, listing):
-        """Même logement déjà vu sur une autre source (Jinka ↔ Bien'ici) ?"""
+        """Même logement déjà vu sur une autre source (Jinka, Bien'ici, SeLoger) ?"""
         import bienici
-        src = listing.get("alert_id") == "bienici"
+        group = lambda l: l.get("alert_id") if l.get("alert_id") in ("bienici", "seloger", "leboncoin") else "jinka"
+        src = group(listing)
         for v in self.state["listings"].values():
             other = v["listing"]
-            if other["id"] == listing["id"] or (other.get("alert_id") == "bienici") == src:
+            if other["id"] == listing["id"] or group(other) == src:
                 continue
             if v["status"] in ("notified", "match", "silent", "rejected") and bienici.same_flat(listing, other):
                 return v

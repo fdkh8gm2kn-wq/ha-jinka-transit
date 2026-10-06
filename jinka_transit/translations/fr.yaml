@@ -47,6 +47,11 @@ configuration:
     description: >-
       Décoché : les logements non meublés sont aussi retenus, avec « 📦 NON MEUBLÉ » dans le titre (email, SMS, page).
       Pour Jinka, c'est aussi le critère « meublé » de tes alertes sur jinka.fr qui compte.
+  seloger:
+    name: Lire les alertes SeLoger (boîte mail dédiée)
+    description: >-
+      Annonces tirées des emails d'alerte SeLoger reçus dans la boîte dédiée. Pas d'adresse dans ces emails :
+      position estimée par le quartier (ou le centre de la commune), signalée « ⚠️ position estimée ».
   bienici:
     name: Chercher aussi sur Bien'ici
     description: Mêmes critères que les alertes Jinka ; les doublons Jinka/Bien'ici sont écartés.

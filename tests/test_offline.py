@@ -681,3 +681,33 @@ print("Ascenseur lu sur la fiche Jinka ✔")
 assert main.has_elevator({"description": "W.C. Gd placard.7ème étage sans asc. Bon état."}) is False
 assert main.has_elevator({"description": "5e étage avec asc. refait"}) is True
 print("Abréviation « asc. » ✔")
+# SeLoger : annonces tirées des emails d'alerte
+import seloger
+_html = """<table>
+<tr><td><a href="https://click.by.seloger.com/?qs=AAA"><img src="https://image.by.seloger.com/x.png"></a></td></tr>
+<tr><td><a href="https://click.by.seloger.com/?qs=AAA"><span><strong>689 &euro;/mois</strong></span></a></td></tr>
+<tr><td><a href="https://click.by.seloger.com/?qs=AAA"><strong>Colocation à louer</strong></a></td></tr>
+<tr><td><a>4 pièces · 39 m²</a></td></tr>
+<tr><td><a>La Fourche-Guy Môquet,<br>Paris 17ème arrondissement<br>(75017)</a></td></tr>
+<tr><td class="mobile-button"><span><a href="https://click.by.seloger.com/?qs=AAA">Voir l'annonce</a></span></td></tr>
+<tr><td><a href="https://click.by.seloger.com/?qs=BBB"><span><strong>803 €/mois</strong></span></a></td></tr>
+<tr><td><a><strong>Appartement à louer</strong></a></td></tr>
+<tr><td><a>1 pièce · 25,2 m² · Étage 5/5</a></td></tr>
+<tr><td><a>Amiraux-Simplon-Poissonniers,<br>Paris 18ème arrondissement<br>(75018)</a></td></tr>
+<tr><td><a href="https://click.by.seloger.com/?qs=BBB">Voir l'annonce</a></td></tr>
+<tr><td><a href="https://click.by.seloger.com/?qs=CCC"><strong>690 €/mois</strong></a></td></tr>
+<tr><td>Appartement à louer</td></tr><tr><td>1 pièce · 31,8 m² · RDC/3</td></tr><tr><td>D</td></tr>
+<tr><td>Coubron (93470)</td></tr><tr><td><a href="https://click.by.seloger.com/?qs=CCC">Voir l'annonce</a></td></tr>
+</table>"""
+_se = seloger.parse_email(_html)
+assert [x["rent"] for x in _se] == [689, 803, 690], _se
+assert _se[0]["coliving"] and _se[0]["city"] == "Paris 17e" and _se[0]["quartier"] == "La Fourche-Guy Môquet"
+assert _se[1]["floor"] == 5 and _se[1]["area"] == 25.2 and _se[1]["link"].endswith("qs=BBB")
+assert _se[2]["city"] == "Coubron" and _se[2]["quartier"] is None and _se[2]["floor"] == 0 and _se[2]["dpe"] == "D"
+assert seloger.parse_email(_html)[1]["id"] == _se[1]["id"]  # identifiant stable d'un email à l'autre
+assert seloger.quartier_queries("La Fourche-Guy Môquet") == ["La Fourche-Guy Môquet", "La Fourche", "Guy Môquet"]
+# doublon SeLoger ↔ Bien'ici
+app.state["listings"]["bi-x"] = {"status": "rejected", "crit": "x", "results": [], "ts": time.time(),
+    "listing": {"id": "bienici:x", "alert_id": "bienici", "postal_code": "75018", "rent": 800, "area": 25.0}}
+assert app.find_twin(_se[1])["listing"]["id"] == "bienici:x"
+print("SeLoger (emails d'alerte) ✔")

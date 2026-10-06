@@ -90,9 +90,13 @@ def commune_centre(postal_code, city, cache):
     centre = None
     try:
         rows = get_json("https://geo.api.gouv.fr/communes",
-                        params={"codePostal": postal_code, "fields": "nom,centre"}) or []
-        norm = lambda s: re.sub(r"[^a-z]", "", (s or "").lower().replace("saint", "st"))
-        row = next((r for r in rows if norm(r["nom"]) == norm(city)), rows[0] if rows else None)
+                        params={"codePostal": postal_code, "fields": "nom,centre",
+                                "type": "arrondissement-municipal,commune-actuelle"}) or []
+        norm = lambda s: re.sub(r"[^a-z0-9]", "", (s or "").lower().replace("saint", "st"))
+        # « Paris 17e » ↔ « Paris 17e Arrondissement » : arrondissement d'abord, puis commune
+        row = next((r for r in rows if norm(r["nom"]) == norm(city)), None) or \
+            next((r for r in rows if norm(city) and norm(r["nom"]).startswith(norm(city))), None) or \
+            (rows[0] if rows else None)
         if row and row.get("centre"):
             lon, lat = row["centre"]["coordinates"]
             centre = {"lat": lat, "lon": lon}
@@ -137,4 +141,12 @@ def locate(listing, transit, cache):
         st = find_station(transit, queries, centre, cache)
         if st:
             return st["lat"], st["lon"], f"près de {st['name']} (« {said} » dans l'annonce)"
+    if listing.get("quartier"):
+        import seloger
+        for q in seloger.quartier_queries(listing["quartier"]):
+            st = find_station(transit, [q], centre, cache, max_km=3)
+            if st:
+                return st["lat"], st["lon"], f"quartier {listing['quartier']} (près de l'arrêt {st['name']}) — à vérifier"
+    if centre and listing.get("alert_id") == "seloger":
+        return centre["lat"], centre["lon"], f"centre de {listing.get('city')} (quartier non localisé) — à vérifier"
     return None
