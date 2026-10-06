@@ -82,7 +82,7 @@ button,.btn{font:inherit;padding:7px 14px;border-radius:9px;border:1px solid var
 .where{font-weight:600}.where .q{font-weight:400;color:var(--muted)}
 .badges{display:flex;gap:5px;flex-wrap:wrap}.b{font-size:12px;padding:2px 7px;border-radius:6px;background:var(--chip)}
 .b.warn{background:var(--warnbg);color:var(--warn)}.b.nm{background:var(--accentbg);color:var(--accent);font-weight:600}
-.dpe{font-weight:800;color:#111;border-radius:4px 10px 10px 4px;padding-right:10px}.dpe.A{background:#009c6d;color:#fff}.dpe.B{background:#52b153;color:#fff}.dpe.C{background:#a5cc74}
+.dpe{font-weight:800;color:#111;border-radius:4px 10px 10px 4px;padding:2px 11px 2px 8px;font-size:13px}.dpe.A{background:#009c6d;color:#fff}.dpe.B{background:#52b153;color:#fff}.dpe.C{background:#a5cc74}
 .dpe.D{background:#f4e70f}.dpe.E{background:#f0b40f}.dpe.F{background:#eb8235;color:#fff}.dpe.G{background:#d7221f;color:#fff}
 .trips{display:flex;gap:6px;flex-wrap:wrap}.trip{font-size:15px;font-weight:600;padding:4px 10px 4px 6px;border-radius:10px;background:var(--okbg);color:var(--ok);display:inline-flex;align-items:center;gap:5px}
 .trip .ic{font-size:22px;line-height:1}
@@ -176,7 +176,7 @@ def card(v, tag, back, esc=html.escape):
                                    f"{int(l['rooms'])} p." if l.get("rooms") else "") if x)
     badges = []
     if l.get("dpe") in DPE_OK:
-        badges.append(f"<span class='b dpe {l['dpe']}'>DPE {l['dpe']}</span>")
+        badges.append(f"<span class='b dpe {l['dpe']}' title='Classe énergie (DPE)'>{l['dpe']}</span>")
     if l.get("furnished") is False:
         badges.append("<span class='b nm'>📦 Non meublé</span>")
     elif l.get("furnished"):

@@ -1,5 +1,5 @@
 name: Jinka Transit
-version: "1.17.0"
+version: "1.17.1"
 slug: jinka_transit
 description: Annonces Jinka filtrées par temps de trajet en métro/RER/tram (sans bus) vers tes adresses
 url: https://github.com/fdkh8gm2kn-wq/ha-jinka-transit

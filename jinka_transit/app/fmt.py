@@ -142,7 +142,8 @@ def html_of(v):
     badges = []
     if l.get("dpe") in DPE_COLORS:
         bg, fg = DPE_COLORS[l["dpe"]]
-        badges.append(f"<span style='{badge};background:{bg};color:{fg}'>DPE {l['dpe']}</span>")
+        badges.append(f"<span title='Classe énergie (DPE)' style='{badge};background:{bg};color:{fg};"
+                      f"font-weight:800;border-radius:4px 10px 10px 4px;padding:3px 11px 3px 8px'>{l['dpe']}</span>")
     if l.get("furnished") is False:
         badges.append(f"<span style='{badge};background:#eef2ff;color:#3a5bdc'>📦 Non meublé</span>")
     elif l.get("furnished"):
