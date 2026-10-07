@@ -470,22 +470,26 @@ assert len({app.scan_interval(_dt(2026, 10, 5, 10, 0)) for _ in range(20)}) > 1
 assert app.scan_interval(_dt(2026, 10, 5, 7, 55)) == 300   # s'arrête à 8h pile
 assert app.scan_interval(_dt(2026, 10, 5, 23, 50)) == 600  # s'arrête à minuit
 print("Intervalle jour / soir ✔")
-# Rapport quotidien
+# Rapport quotidien : la veille, de 0 h à minuit, par site (SeLoger compris)
 sent_mail.clear()
 app.opts.update({"daily_report_email": "rapport@example.org", "daily_report_time": "08:00"})
-app.state.pop("daily", None); app.state.pop("daily_sent", None)
-app.count_daily({"alert_id": "x"}, "testées")
-app.count_daily(L["ad1"]["listing"], "testées"); app.count_daily(L["ad1"]["listing"], "retenues")
-app.count_daily({"alert_id": "bienici"}, "testées"); app.count_daily({"alert_id": "bienici"}, "doublons")
+app.state.pop("daily_days", None); app.state.pop("daily_sent", None)
+_y = _dt(2026, 10, 4, 15, 0)
+app.count_daily({"alert_id": "x"}, "testées", _y)
+app.count_daily(L["ad1"]["listing"], "testées", _y); app.count_daily(L["ad1"]["listing"], "retenues", _y)
+app.count_daily({"alert_id": "bienici"}, "testées", _y); app.count_daily({"alert_id": "bienici"}, "doublons", _y)
+app.count_daily({"alert_id": "seloger", "link": "https://click.by.seloger.com/x"}, "testées", _y)
+app.count_daily({"alert_id": "jinka"}, "testées", _dt(2026, 10, 5, 7, 10))  # arrivée le matin même : pas dans ce rapport
 assert not app.daily_report_due(_dt(2026, 10, 5, 7, 59))
 assert app.daily_report_due(_dt(2026, 10, 5, 8, 1))
 assert app.send_daily_report(_dt(2026, 10, 5, 8, 1))
 m = [x[1] for x in sent_mail if x[0] == "msg"][-1]
 body = m.get_body(("plain",)).get_content()
-assert m["To"] == "rapport@example.org" and "3 annonces testées, 1 retenues" in m["Subject"], m["Subject"]
+assert m["To"] == "rapport@example.org" and "04/10 — 4 annonces testées, 1 retenues" in m["Subject"], m["Subject"]
 assert "Jinka : 2 annonces testées, 1 retenues" in body and "Bien'ici : 1 annonces testées, 0 retenues, 1 doublons" in body, body
+assert "SeLoger : 1 annonces testées" in body
 assert not app.daily_report_due(_dt(2026, 10, 5, 9, 0)) and app.daily_report_due(_dt(2026, 10, 6, 8, 0))
-assert app.state["daily"]["sites"] == {}
+assert "2026-10-05" in app.state["daily_days"]  # la journée du 5 sera dans le rapport du 6
 print("Rapport quotidien ✔")
 # Pagination (50 par page) et suppression après 30 jours
 import time

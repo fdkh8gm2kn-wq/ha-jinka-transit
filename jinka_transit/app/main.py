@@ -421,13 +421,20 @@ class App:
 
     # ---------- rapport quotidien ----------
 
-    def count_daily(self, listing, kind):
-        site = "Bien'ici" if listing.get("alert_id") == "bienici" else "Jinka"
-        d = self.state.setdefault("daily", {"since": time.time(), "sites": {}})
-        c = d["sites"].setdefault(site, {"testées": 0, "retenues": 0, "doublons": 0, "liens": []})
+    SITE_NAMES = {"bienici": "Bien'ici", "seloger": "SeLoger", "leboncoin": "Leboncoin"}
+
+    def count_daily(self, listing, kind, now=None):
+        """Compteurs du rapport quotidien, par jour calendaire et par site."""
+        site = self.SITE_NAMES.get(listing.get("alert_id"), "Jinka")
+        day = (now or datetime.now()).strftime("%Y-%m-%d")
+        days = self.state.setdefault("daily_days", {})
+        old = self.state.pop("daily", None)  # ancien format : compteurs depuis le dernier rapport → jour courant
+        if old and old.get("sites"):
+            days.setdefault(datetime.fromtimestamp(old.get("since", time.time())).strftime("%Y-%m-%d"), {}).update(old["sites"])
+        c = days.setdefault(day, {}).setdefault(site, {"testées": 0, "retenues": 0, "doublons": 0, "liens": []})
         c[kind] += 1
         if kind == "retenues":
-            c["liens"].append(f"{title_of(listing)} — {listing['link']}")
+            c["liens"].append(f"{title_of(listing)} — {listing.get('link') or ''}")
 
     def daily_report_due(self, now=None):
         now = now or datetime.now()
@@ -441,20 +448,22 @@ class App:
         return now.hour * 60 + now.minute >= h * 60 + m and self.state.get("daily_sent") != now.strftime("%Y-%m-%d")
 
     def send_daily_report(self, now=None):
-        """Email du matin : annonces testées / retenues par site depuis le dernier rapport."""
+        """Email du matin : annonces de la veille (0 h – minuit) testées / retenues, par site."""
         now = now or datetime.now()
-        d = self.state.get("daily") or {"since": time.time(), "sites": {}}
-        since = datetime.fromtimestamp(d["since"])
+        day = (now - timedelta(days=1)).strftime("%Y-%m-%d")
+        label = f"{(now - timedelta(days=1)):%d/%m}"
         o = self.opts
         n = Notifier(email_to=o.get("daily_report_email"), smtp_user=o.get("mail_user") or o.get("jinka_email"),
                      smtp_password=o.get("mail_password"), smtp_server=o.get("smtp_server"), sender_name=o.get("email_sender_name"))
         if not n.email_ok:
             return False
-        sites = {k: d["sites"].get(k) or {"testées": 0, "retenues": 0, "doublons": 0, "liens": []}
-                 for k in ("Jinka", "Bien'ici")}
+        got = (self.state.get("daily_days") or {}).get(day, {})
+        order = ["Jinka", "Bien'ici", "SeLoger"] + sorted(k for k in got if k not in ("Jinka", "Bien'ici", "SeLoger"))
+        empty = {"testées": 0, "retenues": 0, "doublons": 0, "liens": []}
+        sites = {k: got.get(k) or dict(empty) for k in order if k in got or k in ("Jinka", "Bien'ici", "SeLoger")}
         tot_t = sum(c["testées"] for c in sites.values())
         tot_r = sum(c["retenues"] for c in sites.values())
-        lines = [f"Depuis le {since:%d/%m à %H:%M} :", ""]
+        lines = [f"Annonces de la veille ({label}) :", ""]
         rows = ""
         for site, c in sites.items():
             dup = f", {c['doublons']} doublons écartés" if c["doublons"] else ""
@@ -466,15 +475,17 @@ class App:
                   f"Dernier scan : {self.last_scan.get('at') or '—'} ({self.last_scan.get('error') or 'ok'})"]
         links = "".join(f"<li>{x.rsplit(' — ', 1)[0]} — <a href='{x.rsplit(' — ', 1)[1]}'>voir</a> ({site})</li>"
                         for site, c in sites.items() for x in c["liens"])
-        html = (f"<p>Depuis le {since:%d/%m à %H:%M} :</p>"
+        html = (f"<p>Annonces de la veille ({label}, de 0 h à minuit) :</p>"
                 "<table border=1 cellpadding=6 style='border-collapse:collapse'>"
                 "<tr><th>Site</th><th>Testées</th><th>Retenues</th><th>Doublons</th></tr>"
                 f"{rows}<tr><td><b>Total</b></td><td align=right>{tot_t}</td><td align=right><b>{tot_r}</b></td><td></td></tr></table>"
                 + (f"<p>Annonces retenues :</p><ul>{links}</ul>" if links else "")
                 + f"<p style='color:#888'>Dernier scan : {self.last_scan.get('at') or '—'} ({self.last_scan.get('error') or 'ok'})</p>")
-        if n._email(f"📊 {self.brand()} : {tot_t} annonces testées, {tot_r} retenues", "\n".join(lines), html):
-            self.state["daily"] = {"since": time.time(), "sites": {}}
+        if n._email(f"📊 {self.brand()} : {label} — {tot_t} annonces testées, {tot_r} retenues", "\n".join(lines), html):
             self.state["daily_sent"] = now.strftime("%Y-%m-%d")
+            cutoff = (now - timedelta(days=8)).strftime("%Y-%m-%d")
+            self.state["daily_days"] = {k: v for k, v in (self.state.get("daily_days") or {}).items() if k >= cutoff}
+            self.state.pop("daily", None)  # ancien format (depuis le dernier rapport)
             self.save_state()
             return True
         return False
