@@ -760,3 +760,12 @@ app.opts["max_dpe"] = ""
 assert app.basic_reject({"dpe": "G", "description": ""}) is None
 assert fmt.DPE_COLORS["D"][0] == "#f4e70f"
 print("DPE maximum ✔")
+
+# Sécurité : liens http(s) seulement, icône échappée dans l'email
+assert fmt.safe_url("javascript:alert(1)") == "#" and fmt.safe_url("https://x.fr/a") == "https://x.fr/a"
+_h = fmt.html_of({"listing": {"link": "javascript:alert(1)", "rent": 800, "city": "X"}, "results": [
+    {"name": "<b>x</b>", "minutes": 30, "ok": True, "steps": []}]})
+assert "javascript:" not in _h and "<b>x</b>" not in _h
+import mailbox as _mb
+assert _mb.ACCOUNT_MAIL.search("Confirmez votre adresse email") and not _mb.ACCOUNT_MAIL.search("3 nouvelles annonces")
+print("Sécurité (liens, échappement, emails de compte) ✔")

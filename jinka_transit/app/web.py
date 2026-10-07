@@ -12,11 +12,11 @@ import re
 import threading
 import time
 from string import Template
-from urllib.parse import parse_qs, urlencode
+from urllib.parse import parse_qs, urlencode, urlparse
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from fmt import dest_icon as _dest_icon, steps_of, title_of
+from fmt import dest_icon as _dest_icon, safe_url, steps_of, title_of
 
 log = logging.getLogger("web")
 
@@ -167,7 +167,7 @@ def card(v, tag, back, esc=html.escape):
     l = v["listing"]
     lid = l["id"]
     img = "<div class='none'>🏠</div>" + (
-        f"<img loading='lazy' referrerpolicy='no-referrer' src='{esc(l['image'])}' alt='' onerror='this.remove()'>"
+        f"<img loading='lazy' referrerpolicy='no-referrer' src='{esc(safe_url(l['image']))}' alt='' onerror='this.remove()'>"
         if l.get("image") and str(l["image"]).startswith("http") else "")
     first = v.get("first_seen") or v.get("ts", 0)
     new = "<span class='tag'>nouveau</span>" if time.time() - first < 86400 and v["status"] != "rejected" else ""
@@ -211,7 +211,7 @@ def card(v, tag, back, esc=html.escape):
         f"<button class='{'on' if tag == k else ''}' title='{lbl}'>{ico}</button></form>"
         for k, (ico, lbl) in TRACK.items())
     return (f"<article class='ad t-{tag or 'none'}' id='{anchor}'>"
-            f"<a class='ph' href='{esc(l.get('link') or '#')}' target='_blank' rel='noopener'>{img}{new}<span class='src'>{src}</span></a>"
+            f"<a class='ph' href='{esc(safe_url(l.get('link')))}' target='_blank' rel='noopener'>{img}{new}<span class='src'>{src}</span></a>"
             f"<div class='body'><div class='top'><span class='price'>{int(l['rent']) if l.get('rent') else '?'} €</span>"
             f"<span class='muted'>{facts}</span></div>"
             f"<div class='where'>{esc(l.get('city') or '')} <span class='q'>{esc(l.get('postal_code') or '')}"
@@ -321,7 +321,7 @@ def render_map(app, items, tag_of):
                           f"{esc(l.get('city') or '')}<br>"
                           + " · ".join(esc(f"{short_dest(r['name'])} {r['minutes']}'") for r in v.get("results", [])
                                        if not r.get("info_only") and r.get("minutes") is not None)
-                          + f"<br><a href='{esc(l.get('link') or '#')}' target='_blank' rel='noopener'>voir l'annonce</a>"
+                          + f"<br><a href='{esc(safe_url(l.get('link')))}' target='_blank' rel='noopener'>voir l'annonce</a>"
                           + ("<br>⚠️ position estimée" if l.get("approx") else ""))})
     geo = app.state.get("geocode", {})
     dpts = []
@@ -479,9 +479,22 @@ def start(app, port=8099):
             sort = q["s"] if q.get("s") in SORTS else "recent"
             self._send(200, render(app, flt, page, view, sort))
 
+        def _same_origin(self):
+            """Refuse un formulaire envoyé depuis un autre site (le navigateur joint le mot de passe tout seul)."""
+            origin = self.headers.get("Origin") or self.headers.get("Referer") or ""
+            if not origin or origin == "null":
+                return not self.headers.get("Origin")  # pas d'en-tête : client non navigateur (tests, curl)
+            host = (self.headers.get("X-Forwarded-Host") or self.headers.get("Host") or "").split(",")[0].strip()
+            return urlparse(origin).netloc == host
+
         def do_POST(self):
             if not self._allowed():
                 return
+            # accès direct (mot de passe joint automatiquement par le navigateur) : on vérifie l'origine.
+            # Via Home Assistant (Ingress), c'est HA qui authentifie la session.
+            if self.client_address[0] != INGRESS_IP and not self._same_origin():
+                log.warning("Formulaire refusé : origine %s", self.headers.get("Origin") or self.headers.get("Referer"))
+                return self._send(403, "Origine refusée.", "text/plain; charset=utf-8")
             path = self.path.rstrip("/")
             length = int(self.headers.get("Content-Length") or 0)
             form = {k: v[0] for k, v in parse_qs(self.rfile.read(length).decode()).items()}

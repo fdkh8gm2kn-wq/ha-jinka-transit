@@ -1,5 +1,7 @@
 """Mise en forme des annonces pour les notifications et l'interface."""
 
+import re
+
 
 def title_of(l):
     parts = []
@@ -103,8 +105,14 @@ def short_of(v):
     return f"{title_of(l)}\n{trips}{approx}\n{l['link']}"
 
 
-DEST_ICONS = ((r"travail|bureau|boulot|job|work", "💼"), (r"[ée]cole|fac|univ|campus|lyc[ée]e", "🎓"),
+DEST_ICONS = ((r"travail|bureau|boulot|job|work", "💼"), (r"[ée]cole|fac\b|facult|univ|campus|lyc[ée]e|school", "🎓"),
               (r"gare|train", "🚆"), (r"arena|concert|salle|z[ée]nith|olympia|stade", "🎤"))
+
+
+def safe_url(u):
+    """Lien utilisable dans une page ou un email : http(s) uniquement (jamais « javascript: »)."""
+    u = str(u or "").strip()
+    return u if re.match(r"(?i)^https?://", u) else "#"
 
 
 def dest_icon(name, short=True):
@@ -127,11 +135,11 @@ def html_of(v):
     from html import escape as e
     l = v["listing"]
     brand = e(v.get("brand") or "Jinka Transit")
-    link = e(l.get("link") or "#")
+    link = e(safe_url(l.get("link")))
     font = "font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
     badge = ("display:inline-block;padding:3px 8px;border-radius:6px;font-size:12px;font-weight:600;"
              "margin:0 4px 4px 0;background:#f2f4f7;color:#344054")
-    photo = (f"<a href='{link}'><img src='{e(l['image'])}' alt='' width='600' "
+    photo = (f"<a href='{link}'><img src='{e(safe_url(l['image']))}' alt='' width='600' "
              f"style='display:block;width:100%;max-width:600px;height:auto;border:0'></a>"
              if l.get("image") and str(l["image"]).startswith("http") else
              f"<a href='{link}' style='display:block;text-decoration:none;background:#eef2ff;text-align:center;"
@@ -158,9 +166,9 @@ def html_of(v):
         bg, fg = ("#f2f4f7", "#667085") if info else (("#e7f6ef", "#12805c") if r.get("ok") else ("#fdecea", "#b42318"))
         chips.append(f"<td style='padding:0 6px 6px 0'><span style='display:inline-block;padding:6px 10px;border-radius:10px;"
                      f"background:{bg};color:{fg};font-size:16px;font-weight:700;white-space:nowrap'>"
-                     f"<span style='font-size:20px'>{dest_icon(r['name'])}</span> {r['minutes']}'</span></td>")
+                     f"<span style='font-size:20px'>{e(dest_icon(r['name']))}</span> {r['minutes']}'</span></td>")
         steps = "<br>".join(e(x.strip().replace("*", "")) for x in steps_of(r))
-        details.append(f"<p style='margin:12px 0 2px;font-size:14px'><b>{dest_icon(r['name'])} {e(r['name'])}</b> — "
+        details.append(f"<p style='margin:12px 0 2px;font-size:14px'><b>{e(dest_icon(r['name']))} {e(r['name'])}</b> — "
                        f"{r['minutes']} min porte à porte{counted_txt(r) if not info else ''}"
                        f"{'' if info else ' (max ' + str(r.get('max', '?')) + ')'}</p>"
                        f"<p style='margin:0;font-size:13px;color:#475467;line-height:1.5'>{steps}</p>")

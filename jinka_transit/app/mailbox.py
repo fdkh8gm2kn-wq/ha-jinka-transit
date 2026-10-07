@@ -149,6 +149,7 @@ def extract_code(text):
 
 
 ALERT_SENDERS = ("seloger", "leboncoin")
+ACCOUNT_MAIL = re.compile(r"(?i)confirm|mot de passe|password|v[ée]rifi|connexion|identifiant|code de|s[ée]curit")
 
 
 def alert_emails(host, user, password, since_days=3, max_per_folder=60):
@@ -172,8 +173,9 @@ def alert_emails(host, user, password, since_days=3, max_per_folder=60):
                 h = email.message_from_bytes(head[0][1])
                 sender = str(make_header(decode_header(h.get("From", ""))))
                 site = next((s for s in ALERT_SENDERS if s in sender.lower()), None)
-                if not site:
-                    continue
+                subject = str(make_header(decode_header(h.get("Subject", ""))))
+                if not site or ACCOUNT_MAIL.search(subject):
+                    continue  # pas les emails de compte (confirmation, mot de passe…)
                 typ, msg_data = imap.fetch(num, "(BODY.PEEK[])")
                 if typ != "OK" or not msg_data or not isinstance(msg_data[0], tuple):
                     continue
