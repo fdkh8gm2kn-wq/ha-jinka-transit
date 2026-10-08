@@ -31,6 +31,15 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s [%(nam
 log = logging.getLogger("main")
 
 
+def excluded_zone(postal_code, spec):
+    """Zone exclue qui contient ce code postal : « 94 » (département) ou « 75018 » (code postal), sinon None."""
+    cp = str(postal_code or "").strip()
+    for tok in re.split(r"[\s,;]+", spec or ""):
+        if tok and cp and (cp == tok or (len(tok) <= 3 and cp.startswith(tok))):
+            return tok
+    return None
+
+
 FLOOR_RE = re.compile(r"\b(\d{1,2})\s*(?:e|è|ème|eme|ieme|ième|er|ere|ère)\s+(?:et\s+dernier\s+)?étage", re.I)
 
 
@@ -99,7 +108,8 @@ class App:
                           "localisation-v2", "marche-destination-30", o.get("min_area", 0),
                           o.get("transfer_penalty_minutes", 3), o.get("max_transfers", 2),
                           bool(o.get("furnished_only")), int(o.get("max_floor") or 0), "ascenseur-v2",
-                          (o.get("max_dpe") or "").upper()],
+                          (o.get("max_dpe") or "").upper(),
+                          o.get("excluded_zones") or ""],
                          sort_keys=True)
         return hashlib.sha1(key.encode()).hexdigest()[:12]
 
@@ -179,6 +189,9 @@ class App:
         import bienici
         if listing.get("coliving") or bienici.is_coliving({"description": listing.get("description")}):
             return "chambre en colocation"
+        zone = excluded_zone(listing.get("postal_code"), self.opts.get("excluded_zones"))
+        if zone:
+            return f"zone exclue ({zone})"
         if self.opts.get("furnished_only") and listing.get("furnished") is False:
             return "non meublé"
         max_dpe = (self.opts.get("max_dpe") or "").strip().upper()[:1]

@@ -769,3 +769,12 @@ assert "javascript:" not in _h and "<b>x</b>" not in _h
 import mailbox as _mb
 assert _mb.ACCOUNT_MAIL.search("Confirmez votre adresse email") and not _mb.ACCOUNT_MAIL.search("3 nouvelles annonces")
 print("Sécurité (liens, échappement, emails de compte) ✔")
+# Zones exclues (département ou code postal)
+assert main.excluded_zone("94110", "94, 75018") == "94" and main.excluded_zone("75018", "94, 75018") == "75018"
+assert main.excluded_zone("75013", "94, 75018") is None and main.excluded_zone("92120", "") is None
+app.opts.update({"excluded_zones": "94, 75018", "max_dpe": "", "max_floor": 0})
+assert app.basic_reject({"postal_code": "94200", "description": ""}) == "zone exclue (94)"
+assert app.basic_reject({"postal_code": "75018", "description": ""}) == "zone exclue (75018)"
+assert app.basic_reject({"postal_code": "75014", "description": ""}) is None
+app.opts["excluded_zones"] = ""
+print("Zones exclues ✔")

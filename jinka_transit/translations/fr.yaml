@@ -36,6 +36,11 @@ configuration:
   min_area:
     name: Surface minimum (m²)
     description: 0 = pas de minimum. Les annonces sans surface indiquée sont gardées.
+  excluded_zones:
+    name: Zones exclues
+    description: >-
+      Départements ou codes postaux à écarter, séparés par des virgules (ex. « 94, 75018 »). S'applique à
+      toutes les sources (Jinka, Bien'ici, SeLoger).
   max_dpe:
     name: DPE maximum
     description: Classe énergie la moins bonne acceptée (ex. E écarte F et G). Vide = pas de limite ; DPE inconnu = gardée.

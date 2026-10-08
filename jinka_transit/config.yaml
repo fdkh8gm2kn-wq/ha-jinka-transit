@@ -1,5 +1,5 @@
 name: Jinka Transit
-version: "1.17.3"
+version: "1.18.0"
 slug: jinka_transit
 description: Annonces Jinka filtrées par temps de trajet en métro/RER/tram (sans bus) vers tes adresses
 url: https://github.com/fdkh8gm2kn-wq/ha-jinka-transit
@@ -50,6 +50,7 @@ options:
   min_area: 0
   max_floor: 0
   max_dpe: ""
+  excluded_zones: ""
   furnished_only: false
   bienici: true
   seloger: true
@@ -98,6 +99,7 @@ schema:
   furnished_only: "bool?"
   max_floor: "int(0,50)?"
   max_dpe: "str?"
+  excluded_zones: "str?"
   bienici: "bool?"
   seloger: "bool?"
   bienici_communes:
