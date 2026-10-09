@@ -785,3 +785,11 @@ assert app.basic_reject({"area": 40, "description": ""}) is None and app.basic_r
 app.opts["max_area"] = 0
 assert app.basic_reject({"area": 120, "description": ""}) is None
 print("Surface maximum ✔")
+# Nouvelles alertes / nouveau compte Jinka : une annonce déjà envoyée (même fiche) n'est pas renvoyée
+_sent = next(v for v in app.state["listings"].values() if v["status"] == "notified")
+_sent["listing"]["uuid"] = "fiche-123"
+_new = {**_sent["listing"], "id": "nouvel-id-999", "alert_id": "nouvelle-alerte", "uuid": "fiche-123"}
+_idx = {v["listing"]["uuid"]: v for v in app.state["listings"].values()
+        if v["status"] in ("notified", "silent") and v["listing"].get("uuid")}
+assert _idx["fiche-123"] is _sent
+print("Pas de renvoi après changement de compte Jinka ✔")

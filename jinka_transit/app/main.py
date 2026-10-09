@@ -333,10 +333,19 @@ class App:
         stats = {"annonces": len(listings), "évaluées": 0, "ok": 0, "refusées": 0, "doublons": 0}
         known = self.state["listings"]
         forgotten = self.state.get("forgotten", {})
+        # annonces déjà envoyées, retrouvables par leur identifiant de fiche (même annonce vue par une autre
+        # alerte ou un autre compte Jinka) : jamais renvoyées
+        sent_by_uuid = {v["listing"]["uuid"]: v for v in known.values()
+                        if v["status"] in ("notified", "silent") and v["listing"].get("uuid")}
         for l in listings:
             if l["id"] in forgotten:  # vue il y a plus de 30 jours : on ne la retraite pas
                 continue
             prev = known.get(l["id"])
+            if not prev and l.get("uuid") in sent_by_uuid:
+                old_v = sent_by_uuid[l["uuid"]]
+                known[l["id"]] = {**old_v, "listing": {**old_v["listing"], **{k: l[k] for k in ("id", "alert_id",
+                                  "alert_name", "link")}}, "ts": time.time()}
+                continue
             if prev:  # complète les annonces déjà connues (champs ajoutés depuis : DPE, meublé)
                 prev["listing"].update({k: l[k] for k in ("dpe", "furnished", "floor", "elevator")
                                         if l.get(k) is not None})
