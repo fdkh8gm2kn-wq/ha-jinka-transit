@@ -41,7 +41,7 @@ def ad(i, lat, lng):
 ADS = [ad("ad1", 1.0, 1.0),   # métro rapide partout -> OK
        ad("ad2", 2.0, 2.0),   # seul trajet = bus -> refusé
        ad("ad3", 3.0, 3.0),   # RER mais 40 min vers l'école (> 30) -> refusé
-       {**ad("ad4", 4.0, 4.0), "lat": None}]  # pas de coordonnées
+       {**ad("ad4", 4.0, 4.0), "lat": None, "postal_code": None}]  # ni coordonnées, ni commune
 
 
 def stop(name):
@@ -388,7 +388,7 @@ assert r and "Saint-Gratien (RER C), indiquée par Jinka" in r[2], r
 r = locate.locate({"uuid": "u-gps", "postal_code": "92700", "city": "Colombes"}, tl, cache_l)
 assert r == (48.9, 2.25, None), r
 r = locate.locate({"uuid": "u-texte", "postal_code": "95210", "city": "Saint-Gratien"}, tl, {})
-assert r is None or "Garenne" in r[2]  # station trop loin de la commune -> rejetée si > 6 km
+assert r is None or "Garenne" in r[2] or "centre de Saint-Gratien" in r[2]  # station trop loin -> repli sur le centre de la commune
 print("annonces sans GPS : station Jinka / texte ✔")
 # Bien'ici : lecture + doublon avec une annonce Jinka déjà vue
 import bienici  # noqa: E402
@@ -848,3 +848,17 @@ assert not app.mail_cleanup_due(_d2(2026, 10, 12, 9, 0))  # désactivé
 app.opts["mailbox_cleanup_days"] = 1
 assert not app.mail_cleanup_due(_d2(2026, 10, 12, 9, 0))  # moins de 3 jours : refusé
 print("Nettoyage hebdomadaire de la boîte dédiée ✔")
+# Annonces sans position : centre de la commune + remise en traitement du jour
+import locate as _lc
+_c = {}
+_lc.fetch_ad_detail = lambda uuid: {}
+_lc.commune_centre = lambda cp, city, cache: {"lat": 48.8, "lon": 2.3}
+_r = _lc.locate({"uuid": "u", "postal_code": "92130", "city": "Issy", "alert_id": "jinka-x"}, None, _c)
+assert _r and _r[0] == 48.8 and "centre de Issy" in _r[2], _r
+_now2 = time.time()
+app.state["listings"]["np1"] = {"status": "rejected", "crit": "c", "reason": "pas de position (ni GPS…)", "results": [], "ts": _now2, "first_seen": _now2, "listing": {"id": "np1"}}
+app.state["listings"]["np2"] = {"status": "rejected", "crit": "c", "reason": "pas de position (ni GPS…)", "results": [], "ts": _now2 - 3 * 86400, "first_seen": _now2 - 3 * 86400, "listing": {"id": "np2"}}
+app.state.pop("reeval_nopos_v1", None)
+app.reeval_unlocated_today()
+assert app.state["listings"]["np1"]["status"] == "pending" and app.state["listings"]["np2"]["status"] == "rejected"
+print("Sans position : centre de la commune + remise en traitement ✔")

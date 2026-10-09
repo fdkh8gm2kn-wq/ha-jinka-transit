@@ -147,6 +147,6 @@ def locate(listing, transit, cache):
             st = find_station(transit, [q], centre, cache, max_km=3)
             if st:
                 return st["lat"], st["lon"], f"quartier {listing['quartier']} (près de l'arrêt {st['name']}) — à vérifier"
-    if centre and listing.get("alert_id") == "seloger":
-        return centre["lat"], centre["lon"], f"centre de {listing.get('city')} (quartier non localisé) — à vérifier"
+    if centre:  # ni GPS, ni station : centre de la commune (annonce signalée « position estimée »)
+        return centre["lat"], centre["lon"], f"centre de {listing.get('city')} (adresse non localisée) — à vérifier"
     return None

@@ -31,15 +31,6 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s [%(nam
 log = logging.getLogger("main")
 
 
-def excluded_zone(postal_code, spec):
-    """Zone exclue qui contient ce code postal : « 94 » (département) ou « 75018 » (code postal), sinon None."""
-    cp = str(postal_code or "").strip()
-    for tok in re.split(r"[\s,;]+", spec or ""):
-        if tok and cp and (cp == tok or (len(tok) <= 3 and cp.startswith(tok))):
-            return tok
-    return None
-
-
 FLOOR_RE = re.compile(r"\b(\d{1,2})\s*(?:e|è|ème|eme|ieme|ième|er|ere|ère)\s+(?:et\s+dernier\s+)?étage", re.I)
 
 
@@ -107,9 +98,7 @@ class App:
                           o.get("max_walk_minutes"), o.get("max_rent", 0), o.get("max_walk_home_minutes", 5),
                           "localisation-v2", "marche-destination-30", o.get("min_area", 0),
                           o.get("transfer_penalty_minutes", 3), o.get("max_transfers", 2),
-                          bool(o.get("furnished_only")), int(o.get("max_floor") or 0), "ascenseur-v2",
-                          (o.get("max_dpe") or "").upper(),
-                          o.get("excluded_zones") or "", int(o.get("max_area") or 0)],
+                          bool(o.get("furnished_only")), int(o.get("max_floor") or 0), "ascenseur-v2"],
                          sort_keys=True)
         return hashlib.sha1(key.encode()).hexdigest()[:12]
 
@@ -189,14 +178,8 @@ class App:
         import bienici
         if listing.get("coliving") or bienici.is_coliving({"description": listing.get("description")}):
             return "chambre en colocation"
-        zone = excluded_zone(listing.get("postal_code"), self.opts.get("excluded_zones"))
-        if zone:
-            return f"zone exclue ({zone})"
         if self.opts.get("furnished_only") and listing.get("furnished") is False:
             return "non meublé"
-        max_dpe = (self.opts.get("max_dpe") or "").strip().upper()[:1]
-        if max_dpe in "ABCDEFG" and max_dpe and listing.get("dpe") and listing["dpe"] > max_dpe:
-            return f"DPE {listing['dpe']} (max {max_dpe})"
         max_floor = int(self.opts.get("max_floor") or 0)
         if max_floor:
             floor = listing.get("floor")
@@ -213,9 +196,6 @@ class App:
         min_area = int(self.opts.get("min_area") or 0)
         if min_area and listing.get("area") and listing["area"] < min_area:
             return f"surface {listing['area']:g} m² < {min_area} m²"
-        max_area = int(self.opts.get("max_area") or 0)
-        if max_area and listing.get("area") and listing["area"] > max_area:
-            return f"surface {listing['area']:g} m² > {max_area} m² (sans doute une chambre en colocation)"
         return None
 
     def complete_building(self, listing):
@@ -247,7 +227,7 @@ class App:
             import locate
             found = locate.locate(listing, transit, self.state.setdefault("geocode", {}))
             if not found:
-                return "rejected", [], "pas de position (ni GPS, ni station, ni commune localisable)"
+                return "rejected", [], "pas de position (ni GPS, ni station ou quartier localisable)"
             listing["lat"], listing["lng"], listing["approx"] = found
             if listing["approx"]:
                 home_walk_max = None  # on part de la station elle-même
@@ -284,7 +264,6 @@ class App:
         crit = self.criteria_hash()
 
         self.relocate_seloger_once()
-        self.reeval_unlocated_today()
         self.recheck_retained()
         done = {k for k, v in self.state["listings"].items()
                 if v["status"] in ("notified", "silent") or v.get("crit") == crit}
@@ -334,19 +313,10 @@ class App:
         stats = {"annonces": len(listings), "évaluées": 0, "ok": 0, "refusées": 0, "doublons": 0}
         known = self.state["listings"]
         forgotten = self.state.get("forgotten", {})
-        # annonces déjà envoyées, retrouvables par leur identifiant de fiche (même annonce vue par une autre
-        # alerte ou un autre compte Jinka) : jamais renvoyées
-        sent_by_uuid = {v["listing"]["uuid"]: v for v in known.values()
-                        if v["status"] in ("notified", "silent") and v["listing"].get("uuid")}
         for l in listings:
             if l["id"] in forgotten:  # vue il y a plus de 30 jours : on ne la retraite pas
                 continue
             prev = known.get(l["id"])
-            if not prev and l.get("uuid") in sent_by_uuid:
-                old_v = sent_by_uuid[l["uuid"]]
-                known[l["id"]] = {**old_v, "listing": {**old_v["listing"], **{k: l[k] for k in ("id", "alert_id",
-                                  "alert_name", "link")}}, "ts": time.time()}
-                continue
             if prev:  # complète les annonces déjà connues (champs ajoutés depuis : DPE, meublé)
                 prev["listing"].update({k: l[k] for k in ("dpe", "furnished", "floor", "elevator")
                                         if l.get(k) is not None})
@@ -447,20 +417,13 @@ class App:
 
     # ---------- rapport quotidien ----------
 
-    SITE_NAMES = {"bienici": "Bien'ici", "seloger": "SeLoger", "leboncoin": "Leboncoin"}
-
-    def count_daily(self, listing, kind, now=None):
-        """Compteurs du rapport quotidien, par jour calendaire et par site."""
-        site = self.SITE_NAMES.get(listing.get("alert_id"), "Jinka")
-        day = (now or datetime.now()).strftime("%Y-%m-%d")
-        days = self.state.setdefault("daily_days", {})
-        old = self.state.pop("daily", None)  # ancien format : compteurs depuis le dernier rapport → jour courant
-        if old and old.get("sites"):
-            days.setdefault(datetime.fromtimestamp(old.get("since", time.time())).strftime("%Y-%m-%d"), {}).update(old["sites"])
-        c = days.setdefault(day, {}).setdefault(site, {"testées": 0, "retenues": 0, "doublons": 0, "liens": []})
+    def count_daily(self, listing, kind):
+        site = "Bien'ici" if listing.get("alert_id") == "bienici" else "Jinka"
+        d = self.state.setdefault("daily", {"since": time.time(), "sites": {}})
+        c = d["sites"].setdefault(site, {"testées": 0, "retenues": 0, "doublons": 0, "liens": []})
         c[kind] += 1
         if kind == "retenues":
-            c["liens"].append(f"{title_of(listing)} — {listing.get('link') or ''}")
+            c["liens"].append(f"{title_of(listing)} — {listing['link']}")
 
     def daily_report_due(self, now=None):
         now = now or datetime.now()
@@ -474,22 +437,20 @@ class App:
         return now.hour * 60 + now.minute >= h * 60 + m and self.state.get("daily_sent") != now.strftime("%Y-%m-%d")
 
     def send_daily_report(self, now=None):
-        """Email du matin : annonces de la veille (0 h – minuit) testées / retenues, par site."""
+        """Email du matin : annonces testées / retenues par site depuis le dernier rapport."""
         now = now or datetime.now()
-        day = (now - timedelta(days=1)).strftime("%Y-%m-%d")
-        label = f"{(now - timedelta(days=1)):%d/%m}"
+        d = self.state.get("daily") or {"since": time.time(), "sites": {}}
+        since = datetime.fromtimestamp(d["since"])
         o = self.opts
         n = Notifier(email_to=o.get("daily_report_email"), smtp_user=o.get("mail_user") or o.get("jinka_email"),
                      smtp_password=o.get("mail_password"), smtp_server=o.get("smtp_server"), sender_name=o.get("email_sender_name"))
         if not n.email_ok:
             return False
-        got = (self.state.get("daily_days") or {}).get(day, {})
-        order = ["Jinka", "Bien'ici", "SeLoger"] + sorted(k for k in got if k not in ("Jinka", "Bien'ici", "SeLoger"))
-        empty = {"testées": 0, "retenues": 0, "doublons": 0, "liens": []}
-        sites = {k: got.get(k) or dict(empty) for k in order if k in got or k in ("Jinka", "Bien'ici", "SeLoger")}
+        sites = {k: d["sites"].get(k) or {"testées": 0, "retenues": 0, "doublons": 0, "liens": []}
+                 for k in ("Jinka", "Bien'ici")}
         tot_t = sum(c["testées"] for c in sites.values())
         tot_r = sum(c["retenues"] for c in sites.values())
-        lines = [f"Annonces de la veille ({label}) :", ""]
+        lines = [f"Depuis le {since:%d/%m à %H:%M} :", ""]
         rows = ""
         for site, c in sites.items():
             dup = f", {c['doublons']} doublons écartés" if c["doublons"] else ""
@@ -501,17 +462,15 @@ class App:
                   f"Dernier scan : {self.last_scan.get('at') or '—'} ({self.last_scan.get('error') or 'ok'})"]
         links = "".join(f"<li>{x.rsplit(' — ', 1)[0]} — <a href='{x.rsplit(' — ', 1)[1]}'>voir</a> ({site})</li>"
                         for site, c in sites.items() for x in c["liens"])
-        html = (f"<p>Annonces de la veille ({label}, de 0 h à minuit) :</p>"
+        html = (f"<p>Depuis le {since:%d/%m à %H:%M} :</p>"
                 "<table border=1 cellpadding=6 style='border-collapse:collapse'>"
                 "<tr><th>Site</th><th>Testées</th><th>Retenues</th><th>Doublons</th></tr>"
                 f"{rows}<tr><td><b>Total</b></td><td align=right>{tot_t}</td><td align=right><b>{tot_r}</b></td><td></td></tr></table>"
                 + (f"<p>Annonces retenues :</p><ul>{links}</ul>" if links else "")
                 + f"<p style='color:#888'>Dernier scan : {self.last_scan.get('at') or '—'} ({self.last_scan.get('error') or 'ok'})</p>")
-        if n._email(f"📊 {self.brand()} : {label} — {tot_t} annonces testées, {tot_r} retenues", "\n".join(lines), html):
+        if n._email(f"📊 {self.brand()} : {tot_t} annonces testées, {tot_r} retenues", "\n".join(lines), html):
+            self.state["daily"] = {"since": time.time(), "sites": {}}
             self.state["daily_sent"] = now.strftime("%Y-%m-%d")
-            cutoff = (now - timedelta(days=8)).strftime("%Y-%m-%d")
-            self.state["daily_days"] = {k: v for k, v in (self.state.get("daily_days") or {}).items() if k >= cutoff}
-            self.state.pop("daily", None)  # ancien format (depuis le dernier rapport)
             self.save_state()
             return True
         return False
@@ -578,50 +537,6 @@ class App:
                 del lst[3:]
                 log.info("Email d'alerte %s reçu : %s", m["site"], m["subject"])
         return mails
-
-    def mail_cleanup_due(self, now=None):
-        """Nettoyage de la boîte dédiée : le lundi, une fois, si l'option est activée (au moins 3 jours gardés)."""
-        now = now or datetime.now()
-        days = int(self.opts.get("mailbox_cleanup_days") or 0)
-        return (days >= 3 and now.weekday() == 0 and bool(self.opts.get("mail_password"))
-                and self.state.get("mail_cleanup_day") != now.strftime("%Y-%m-%d"))
-
-    def mail_cleanup(self, now=None):
-        """Supprime définitivement les messages de plus de N jours de la boîte dédiée (et de sa corbeille)."""
-        import mailbox
-        now = now or datetime.now()
-        o = self.opts
-        user = o.get("mail_user") or o.get("jinka_email")
-        days = int(o.get("mailbox_cleanup_days") or 0)
-        try:
-            moved, purged = mailbox.cleanup(mailbox.imap_host(user, o.get("mail_imap_server")), user,
-                                            o["mail_password"], days)
-            log.info("Nettoyage de la boîte %s : %d message(s) de plus de %d jours mis à la corbeille, "
-                     "%d effacé(s) définitivement.", user, moved, days, purged)
-        except Exception as e:  # noqa: BLE001
-            log.error("Nettoyage de la boîte mail impossible : %s", e)
-            self.report_error("nettoyage boîte mail", f"Nettoyage de la boîte {user} impossible : {e}")
-        self.state["mail_cleanup_day"] = now.strftime("%Y-%m-%d")
-        if self.lock.acquire(timeout=5):
-            try:
-                self.save_state()
-            finally:
-                self.lock.release()
-
-    def reeval_unlocated_today(self):
-        """Une fois : les annonces du jour refusées faute de position sont recalculées (centre de la commune)."""
-        if self.state.get("reeval_nopos_v1"):
-            return
-        midnight = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
-        n = 0
-        for v in self.state["listings"].values():
-            if (v["status"] == "rejected" and "pas de position" in (v.get("reason") or "")
-                    and (v.get("first_seen") or v.get("ts") or 0) >= midnight):
-                v["status"], v["crit"], v["reason"] = "pending", None, "position à recalculer"
-                n += 1
-        self.state["reeval_nopos_v1"] = True
-        if n:
-            log.info("%d annonce(s) du jour sans position remise(s) en traitement.", n)
 
     def relocate_seloger_once(self):
         """Les premières annonces SeLoger ont été placées au centre de Paris au lieu de leur arrondissement :
@@ -699,24 +614,6 @@ class App:
                         smtp_password=o.get("mail_password"), smtp_server=o.get("smtp_server"),
                         free_sms_user=o.get("free_sms_user"), free_sms_key=o.get("free_sms_key"),
                         sender_name=o.get("email_sender_name"))
-
-    def send_sample(self):
-        """Renvoie la dernière annonce retenue, par email seulement, à l'adresse du rapport (aperçu du format)."""
-        self.opts = self.load_options()
-        o = self.opts
-        to = o.get("daily_report_email") or o.get("error_email") or o.get("email_to")
-        n = Notifier(email_to=to, smtp_user=o.get("mail_user") or o.get("jinka_email"),
-                     smtp_password=o.get("mail_password"), smtp_server=o.get("smtp_server"),
-                     sender_name=o.get("email_sender_name"))
-        if not n.email_ok:
-            raise RuntimeError("Email non configuré (adresse du rapport ou boîte dédiée manquante).")
-        done = sorted((v for v in self.state["listings"].values() if v["status"] in ("notified", "match", "silent")),
-                      key=lambda v: v.get("notified_at") or v.get("ts", 0), reverse=True)
-        if not done:
-            raise RuntimeError("Aucune annonce retenue à renvoyer pour l'instant.")
-        v = done[0]
-        ok = n._email(f"[Exemple] {title_of(v['listing'])}", body_of(v), html_of({**v, "brand": self.brand()}))
-        return to, ok
 
     def send_test(self):
         """Bouton « notification de test » : envoie un message sur chaque canal et dit lequel marche."""
@@ -945,8 +842,6 @@ class App:
                         self.send_daily_report()
                 except Exception:  # noqa: BLE001
                     log.exception("Rapport quotidien non envoyé")
-            if self.mail_cleanup_due():
-                self.mail_cleanup()
             manual = self.scan_now.wait(self.scan_interval())
             self.scan_now.clear()
 
