@@ -44,6 +44,11 @@ configuration:
   max_dpe:
     name: DPE maximum
     description: Classe énergie la moins bonne acceptée (ex. E écarte F et G). Vide = pas de limite ; DPE inconnu = gardée.
+  max_area:
+    name: Surface maximum (m²)
+    description: >-
+      0 = pas de limite. Au-delà, l'annonce est écartée : à ce loyer, une grande surface est presque toujours
+      une chambre en colocation.
   max_floor:
     name: Étage maximum
     description: >-

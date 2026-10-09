@@ -778,3 +778,10 @@ assert app.basic_reject({"postal_code": "75018", "description": ""}) == "zone ex
 assert app.basic_reject({"postal_code": "75014", "description": ""}) is None
 app.opts["excluded_zones"] = ""
 print("Zones exclues ✔")
+# Surface maximum
+app.opts.update({"max_area": 40, "min_area": 20, "excluded_zones": "", "max_rent": 0})
+assert app.basic_reject({"area": 72, "description": ""}).startswith("surface 72 m² > 40 m²")
+assert app.basic_reject({"area": 40, "description": ""}) is None and app.basic_reject({"area": None, "description": ""}) is None
+app.opts["max_area"] = 0
+assert app.basic_reject({"area": 120, "description": ""}) is None
+print("Surface maximum ✔")

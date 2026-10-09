@@ -109,7 +109,7 @@ class App:
                           o.get("transfer_penalty_minutes", 3), o.get("max_transfers", 2),
                           bool(o.get("furnished_only")), int(o.get("max_floor") or 0), "ascenseur-v2",
                           (o.get("max_dpe") or "").upper(),
-                          o.get("excluded_zones") or ""],
+                          o.get("excluded_zones") or "", int(o.get("max_area") or 0)],
                          sort_keys=True)
         return hashlib.sha1(key.encode()).hexdigest()[:12]
 
@@ -213,6 +213,9 @@ class App:
         min_area = int(self.opts.get("min_area") or 0)
         if min_area and listing.get("area") and listing["area"] < min_area:
             return f"surface {listing['area']:g} m² < {min_area} m²"
+        max_area = int(self.opts.get("max_area") or 0)
+        if max_area and listing.get("area") and listing["area"] > max_area:
+            return f"surface {listing['area']:g} m² > {max_area} m² (sans doute une chambre en colocation)"
         return None
 
     def complete_building(self, listing):
