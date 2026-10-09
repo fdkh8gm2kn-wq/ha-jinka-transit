@@ -1,5 +1,5 @@
 name: Jinka Transit
-version: "1.19.1"
+version: "1.20.0"
 slug: jinka_transit
 description: Annonces Jinka filtrées par temps de trajet en métro/RER/tram (sans bus) vers tes adresses
 url: https://github.com/fdkh8gm2kn-wq/ha-jinka-transit
@@ -26,6 +26,7 @@ options:
   mail_password: ""
   mail_user: ""
   mail_imap_server: ""
+  mailbox_cleanup_days: 0
   prim_api_key: ""
   destinations:
     - name: Bureau
@@ -86,6 +87,7 @@ schema:
   mail_password: "password?"
   mail_user: "str?"
   mail_imap_server: "str?"
+  mailbox_cleanup_days: "int(0,365)?"
   prim_api_key: password
   destinations:
     - name: str

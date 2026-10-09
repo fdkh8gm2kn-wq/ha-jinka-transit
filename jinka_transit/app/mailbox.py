@@ -197,3 +197,69 @@ def html_part(msg):
             payload = part.get_payload(decode=True) or b""
             return payload.decode(part.get_content_charset() or "utf-8", "replace")
     return body_text(msg)
+
+
+def special_folders(imap):
+    """Dossiers spéciaux de la boîte (RFC 6154) : {"\\All": "[Gmail]/Tous les messages", "\\Trash": …, "\\Junk": …}."""
+    out = {}
+    typ, data = imap.list()
+    if typ != "OK":
+        return out
+    for line in data or []:
+        line = line.decode(errors="ignore") if isinstance(line, bytes) else str(line)
+        m = re.match(r'\((?P<flags>[^)]*)\) (?:"[^"]*"|NIL) (?P<name>.+)$', line)
+        if not m:
+            continue
+        name = m.group("name").strip().strip('"')
+        for flag in ("\\All", "\\Trash", "\\Junk"):
+            if flag in m.group("flags"):
+                out[flag] = name
+    return out
+
+
+def cleanup(host, user, password, older_than_days):
+    """Supprime définitivement les messages reçus il y a plus de N jours dans la boîte dédiée :
+    tous les messages (et le spam) vont à la corbeille, puis ces messages sont effacés de la corbeille.
+    Renvoie (nombre mis à la corbeille, nombre effacés définitivement)."""
+    password = clean_password(host, password)
+    imap = imaplib.IMAP4_SSL(host, 993, timeout=60)
+    moved = purged = 0
+    q = lambda name: '"' + name.replace('"', '\\"') + '"'
+    try:
+        imap.login(user, password)
+        folders_ = special_folders(imap)
+        trash = folders_.get("\\Trash")
+        if not trash:
+            raise RuntimeError("Corbeille introuvable dans la boîte mail.")
+        day = (datetime.now() - timedelta(days=older_than_days)).strftime("%d-%b-%Y")
+        can_move = b"MOVE" in b" ".join(c if isinstance(c, bytes) else str(c).encode()
+                                         for c in (getattr(imap, "capabilities", ()) or ()))
+        for folder in (folders_.get("\\All") or "INBOX", folders_.get("\\Junk")):
+            if not folder or imap.select(q(folder))[0] != "OK":
+                continue
+            typ, data = imap.uid("SEARCH", None, "BEFORE", day)
+            uids = data[0].split() if typ == "OK" and data and data[0] else []
+            for i in range(0, len(uids), 200):
+                seq = b",".join(uids[i:i + 200]).decode()
+                if can_move:
+                    imap.uid("MOVE", seq, q(trash))
+                else:
+                    imap.uid("COPY", seq, q(trash))
+                    imap.uid("STORE", seq, "+FLAGS", "(\\Deleted)")
+            if uids and not can_move:
+                imap.expunge()
+            moved += len(uids)
+        if imap.select(q(trash))[0] == "OK":
+            typ, data = imap.uid("SEARCH", None, "BEFORE", day)
+            uids = data[0].split() if typ == "OK" and data and data[0] else []
+            for i in range(0, len(uids), 200):
+                imap.uid("STORE", b",".join(uids[i:i + 200]).decode(), "+FLAGS", "(\\Deleted)")
+            if uids:
+                imap.expunge()
+            purged = len(uids)
+    finally:
+        try:
+            imap.logout()
+        except Exception:  # noqa: BLE001
+            pass
+    return moved, purged

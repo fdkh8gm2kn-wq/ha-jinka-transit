@@ -793,3 +793,58 @@ _idx = {v["listing"]["uuid"]: v for v in app.state["listings"].values()
         if v["status"] in ("notified", "silent") and v["listing"].get("uuid")}
 assert _idx["fiche-123"] is _sent
 print("Pas de renvoi après changement de compte Jinka ✔")
+# Nettoyage hebdomadaire de la boîte dédiée (faux serveur IMAP)
+import imaplib as _imaplib
+from datetime import datetime as _d2, timedelta as _td
+class _FakeBox:
+    store = {}
+    def __init__(self, host, port, timeout=None):
+        self.capabilities = (b"IMAP4REV1", b"MOVE"); self.cur = None
+    def login(self, u, p): return "OK", [b""]
+    def logout(self): pass
+    def list(self):
+        return "OK", [b'(\\HasNoChildren) "/" "INBOX"', b'(\\All \\HasNoChildren) "/" "[Gmail]/Tous les messages"',
+                      b'(\\Trash \\HasNoChildren) "/" "[Gmail]/Corbeille"', b'(\\Junk \\HasNoChildren) "/" "[Gmail]/Spam"']
+    def select(self, f):
+        self.cur = f.strip('"'); _FakeBox.store.setdefault(self.cur, {}); return "OK", [b""]
+    def uid(self, cmd, *a):
+        box = _FakeBox.store[self.cur]
+        if cmd == "SEARCH":
+            limit = _d2.strptime(a[2], "%d-%b-%Y")
+            return "OK", [b" ".join(str(u).encode() for u, m in box.items() if m["date"] < limit)]
+        uids = [int(x) for x in a[0].split(",")]
+        if cmd == "MOVE":
+            dest = _FakeBox.store.setdefault(a[1].strip('"'), {})
+            for u in uids:
+                dest[max(dest, default=0) + 1] = box.pop(u)
+        if cmd == "STORE":
+            for u in uids:
+                box[u]["deleted"] = True
+        return "OK", [b""]
+    def expunge(self):
+        box = _FakeBox.store[self.cur]
+        for u in [u for u, m in box.items() if m.get("deleted")]:
+            del box[u]
+        return "OK", [b""]
+_now = _d2.now()
+_FakeBox.store = {"[Gmail]/Tous les messages": {1: {"date": _now - _td(days=10)}, 2: {"date": _now - _td(days=2)},
+                                                3: {"date": _now - _td(days=30)}},
+                  "[Gmail]/Spam": {1: {"date": _now - _td(days=9)}},
+                  "[Gmail]/Corbeille": {1: {"date": _now - _td(days=1)}}}
+_orig_ssl = _imaplib.IMAP4_SSL
+_imaplib.IMAP4_SSL = _FakeBox
+import mailbox as _mb2
+_moved, _purged = _mb2.cleanup("imap.gmail.com", "x@gmail.com", "abcd efgh", 7)
+_imaplib.IMAP4_SSL = _orig_ssl
+assert (_moved, _purged) == (3, 3), (_moved, _purged)
+assert list(_FakeBox.store["[Gmail]/Tous les messages"]) == [2]  # le message de 2 jours est gardé
+assert len(_FakeBox.store["[Gmail]/Corbeille"]) == 1  # seul le message récent reste dans la corbeille
+app.opts.update({"mailbox_cleanup_days": 7, "mail_password": "x"})
+app.state.pop("mail_cleanup_day", None)
+assert app.mail_cleanup_due(_d2(2026, 10, 12, 9, 0))      # lundi
+assert not app.mail_cleanup_due(_d2(2026, 10, 13, 9, 0))  # mardi
+app.opts["mailbox_cleanup_days"] = 0
+assert not app.mail_cleanup_due(_d2(2026, 10, 12, 9, 0))  # désactivé
+app.opts["mailbox_cleanup_days"] = 1
+assert not app.mail_cleanup_due(_d2(2026, 10, 12, 9, 0))  # moins de 3 jours : refusé
+print("Nettoyage hebdomadaire de la boîte dédiée ✔")

@@ -578,6 +578,35 @@ class App:
                 log.info("Email d'alerte %s reçu : %s", m["site"], m["subject"])
         return mails
 
+    def mail_cleanup_due(self, now=None):
+        """Nettoyage de la boîte dédiée : le lundi, une fois, si l'option est activée (au moins 3 jours gardés)."""
+        now = now or datetime.now()
+        days = int(self.opts.get("mailbox_cleanup_days") or 0)
+        return (days >= 3 and now.weekday() == 0 and bool(self.opts.get("mail_password"))
+                and self.state.get("mail_cleanup_day") != now.strftime("%Y-%m-%d"))
+
+    def mail_cleanup(self, now=None):
+        """Supprime définitivement les messages de plus de N jours de la boîte dédiée (et de sa corbeille)."""
+        import mailbox
+        now = now or datetime.now()
+        o = self.opts
+        user = o.get("mail_user") or o.get("jinka_email")
+        days = int(o.get("mailbox_cleanup_days") or 0)
+        try:
+            moved, purged = mailbox.cleanup(mailbox.imap_host(user, o.get("mail_imap_server")), user,
+                                            o["mail_password"], days)
+            log.info("Nettoyage de la boîte %s : %d message(s) de plus de %d jours mis à la corbeille, "
+                     "%d effacé(s) définitivement.", user, moved, days, purged)
+        except Exception as e:  # noqa: BLE001
+            log.error("Nettoyage de la boîte mail impossible : %s", e)
+            self.report_error("nettoyage boîte mail", f"Nettoyage de la boîte {user} impossible : {e}")
+        self.state["mail_cleanup_day"] = now.strftime("%Y-%m-%d")
+        if self.lock.acquire(timeout=5):
+            try:
+                self.save_state()
+            finally:
+                self.lock.release()
+
     def relocate_seloger_once(self):
         """Les premières annonces SeLoger ont été placées au centre de Paris au lieu de leur arrondissement :
         on les fait recalculer (sans renvoi si elles restent bonnes)."""
@@ -900,6 +929,8 @@ class App:
                         self.send_daily_report()
                 except Exception:  # noqa: BLE001
                     log.exception("Rapport quotidien non envoyé")
+            if self.mail_cleanup_due():
+                self.mail_cleanup()
             manual = self.scan_now.wait(self.scan_interval())
             self.scan_now.clear()
 

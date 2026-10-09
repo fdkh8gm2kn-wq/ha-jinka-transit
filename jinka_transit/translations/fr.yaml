@@ -22,6 +22,11 @@ configuration:
   jinka_alerts:
     name: Alertes à surveiller
     description: Noms ou identifiants de tes alertes Jinka (= les secteurs). Vide = toutes.
+  mailbox_cleanup_days:
+    name: Nettoyer la boîte dédiée chaque lundi (jours gardés)
+    description: >-
+      0 = désactivé. Sinon, chaque lundi, les messages reçus il y a plus de ce nombre de jours (7 par ex.) sont
+      supprimés DÉFINITIVEMENT de la boîte dédiée, spam et corbeille compris. Minimum 3 jours.
   prim_api_key:
     name: Clé API PRIM (IDFM)
     description: Clé gratuite sur prim.iledefrance-mobilites.fr, utilisée pour calculer les trajets.
